@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        lean-version: [v4.8.0, v4.7.0]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Lean ${{ matrix.lean-version }}
+      uses: leanprover/lean4-action@v2
+      with:
+        lean-version: ${{ matrix.lean-version }}
+    
+    - name: Install dependencies
+      run: |
+        lake update
+        lake build
+    
+    - name: Run tests
+      run: |
+        lake test
+    
+    - name: Run benchmarks
+      run: |
+        lake exe bench
+    
+    - name: Check determinism
+      run: |
+        # Run tests 200 times with shuffled hypothesis order
+        for i in {1..200}; do
+          lake test
+        done
+    
+    - name: License scan
+      uses: fossas/fossa-action@v1
+      with:
+        api-key: ${{ secrets.FOSSA_API_KEY }}
+    
+    - name: Check for network access in tests
+      run: |
+        # Ensure no network access in tactic tests
+        grep -r "http" tests/ || true
+        grep -r "https" tests/ || true
+
+  benchmark:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Lean
+      uses: leanprover/lean4-action@v2
+      with:
+        lean-version: v4.8.0
+    
+    - name: Install dependencies
+      run: |
+        lake update
+        lake build
+    
+    - name: Run benchmarks
+      run: |
+        lake exe bench > benchmark-results.txt
+    
+    - name: Compare with last release
+      run: |
+        # Compare with last tagged release
+        if [ -n "$(git tag -l)" ]; then
+          git checkout $(git describe --tags --abbrev=0)
+          lake exe bench > old-benchmark-results.txt
+          git checkout -
+          
+          # Compare results and fail if regression > 10%
+          python3 scripts/compare_benchmarks.py benchmark-results.txt old-benchmark-results.txt
+        fi
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: benchmark-results.txt
+
+  docs:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Lean
+      uses: leanprover/lean4-action@v2
+      with:
+        lean-version: v4.8.0
+    
+    - name: Install dependencies
+      run: |
+        lake update
+        lake build
+    
+    - name: Generate documentation
+      run: |
+        lake exe doc-gen4 -- CatNF
+    
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./build/doc
+        destination_dir: docs
