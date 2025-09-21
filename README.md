@@ -5,7 +5,7 @@
 
 [![Lean 4](https://img.shields.io/badge/Lean%204-0.0.1-blue.svg)](https://leanprover.github.io/lean4/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green.svg)](https://github.com/your-username/lean-cat-nf)
+[![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green.svg)](https://github.com/fraware/lean-cat-nf)
 
 ---
 
