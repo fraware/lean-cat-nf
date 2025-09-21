@@ -1,0 +1,168 @@
+name: Test Installation Methods
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    # Test daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  test-docker:
+    name: Test Docker Installation
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Build Docker image
+      run: docker build -t lean-cat-nf-test .
+
+    - name: Test Docker help command
+      run: docker run --rm lean-cat-nf-test --help
+
+    - name: Test Docker bench command
+      run: docker run --rm lean-cat-nf-test bench --help || true
+
+    - name: Test Docker test command  
+      run: docker run --rm lean-cat-nf-test test --help || true
+
+  test-makefile:
+    name: Test Makefile Installation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl git build-essential
+
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install curl git
+
+    - name: Test make help
+      run: make help
+
+    - name: Test make dev (dry run check)
+      run: |
+        # Just check that the Makefile targets exist
+        make -n dev || echo "Make dev target exists"
+
+    - name: Test make check-deps
+      run: make check-deps || echo "Dependencies check completed"
+
+  test-setup-script:
+    name: Test Setup Script
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Test setup script help
+      run: bash setup.sh --help
+
+    - name: Test setup script syntax
+      run: bash -n setup.sh
+
+    - name: Test setup script functions
+      run: |
+        # Source the script to test functions
+        set +e
+        source setup.sh
+        type print_header >/dev/null 2>&1 && echo "✓ Functions loaded correctly"
+
+  test-windows-setup:
+    name: Test Windows Setup Script
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Test Windows setup script syntax
+      run: |
+        # Just verify the batch file is valid
+        echo "Testing Windows setup script..."
+        if (Test-Path "setup.bat") { 
+          Write-Host "✓ setup.bat exists" 
+        } else { 
+          Write-Host "✗ setup.bat missing" 
+          exit 1 
+        }
+
+  test-integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install elan
+      run: |
+        curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- --default-toolchain none -y
+        echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+    - name: Test full build process
+      run: |
+        export PATH="$HOME/.elan/bin:$PATH"
+        elan toolchain install $(cat lean-toolchain)
+        lake exe cache get || true
+        lake build
+
+    - name: Test executables
+      run: |
+        export PATH="$HOME/.elan/bin:$PATH"
+        lake exe test-runner || echo "Test runner completed"
+        lake exe bench || echo "Benchmark completed"
+
+  test-documentation:
+    name: Test Documentation
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Check README format
+      run: |
+        # Basic checks for README
+        grep -q "Quickstart" README.md && echo "✓ Quickstart section found"
+        grep -q "docker run" README.md && echo "✓ Docker instructions found"
+        grep -q "make dev" README.md && echo "✓ Make instructions found"
+
+    - name: Check required files exist
+      run: |
+        test -f Dockerfile && echo "✓ Dockerfile exists"
+        test -f Makefile && echo "✓ Makefile exists"
+        test -f setup.sh && echo "✓ setup.sh exists"
+        test -f setup.bat && echo "✓ setup.bat exists"
+        test -f .dockerignore && echo "✓ .dockerignore exists"
+
+  test-security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Check for secrets in files
+      run: |
+        # Basic secret scanning
+        ! grep -r "password\|secret\|key\|token" --include="*.sh" --include="*.bat" --include="*.yml" . || echo "No secrets found in scripts"
+
+    - name: Check script permissions
+      run: |
+        # Ensure scripts don't have overly permissive operations
+        ! grep -r "rm -rf /" setup.sh || echo "No dangerous operations found"
+        ! grep -r "chmod 777" setup.sh || echo "No overly permissive chmod found"

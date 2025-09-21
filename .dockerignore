@@ -1,0 +1,42 @@
+# Git
+.git/
+.gitignore
+
+# Lake build artifacts
+.lake/build/
+.lake/packages/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Development files
+Makefile
+setup.sh
+setup.bat
+
+# Test artifacts
+test-results/
+coverage/

@@ -38,17 +38,98 @@ graph TD
 
 </div>
 
-## **Installation**
+## **Quickstart** 🚀
 
-Add CatNF to your Lean 4 project by including it in your `lakefile.lean`:
+### **Docker (Recommended)**
 
-```lean
-require catnf from git "https://github.com/your-username/lean-cat-nf.git"
+Get started in seconds with Docker:
+
+```bash
+# Run the help command
+docker run --rm ghcr.io/fraware/lean-cat-nf:latest --help
+
+# Run benchmarks
+docker run --rm ghcr.io/fraware/lean-cat-nf:latest bench
+
+# Run tests
+docker run --rm ghcr.io/fraware/lean-cat-nf:latest test
+```
+
+### **One-Command Installation**
+
+Install and run in one command:
+
+```bash
+# Linux/macOS
+curl -sSL https://raw.githubusercontent.com/fraware/lean-cat-nf/main/setup.sh | bash
+
+# Windows (PowerShell)
+iwr -useb https://raw.githubusercontent.com/fraware/lean-cat-nf/main/setup.bat | iex
+```
+
+### **Local Installation**
+
+For development or local use:
+
+```bash
+# Clone the repository
+git clone https://github.com/fraware/lean-cat-nf.git
+cd lean-cat-nf
+
+# One-command setup
+make dev
+
+# Run the project
+make run
+make test
+make bench
+```
+
+### **Global Installation**
+
+Install globally on your system:
+
+```bash
+git clone https://github.com/fraware/lean-cat-nf.git
+cd lean-cat-nf
+make dev
+make install
+
+# Now use from anywhere
+lean-cat-nf --help
 ```
 
 ---
 
-## **Quick Start**
+## **Installation**
+
+### **As a Lean 4 Library**
+
+Add CatNF to your Lean 4 project by including it in your `lakefile.lean`:
+
+```lean
+require catnf from git "https://github.com/fraware/lean-cat-nf.git"
+```
+
+### **Development Setup**
+
+For contributing or advanced usage:
+
+```bash
+# Install dependencies and build
+make dev
+
+# Available commands
+make help        # Show all available commands
+make test        # Run test suite
+make bench       # Run benchmarks
+make clean       # Clean build artifacts
+make docs        # Generate documentation
+```
+
+---
+
+## **Usage Examples**
 
 ### **Basic Usage**
 
