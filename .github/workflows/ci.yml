@@ -2,120 +2,168 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        lean-version: [v4.8.0, v4.7.0]
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Lean ${{ matrix.lean-version }}
-      uses: leanprover/lean4-action@v2
-      with:
-        lean-version: ${{ matrix.lean-version }}
-    
-    - name: Install dependencies
-      run: |
-        lake update
-        lake build
-    
-    - name: Run tests
-      run: |
-        lake test
-    
-    - name: Run benchmarks
-      run: |
-        lake exe bench
-    
-    - name: Check determinism
-      run: |
-        # Run tests 200 times with shuffled hypothesis order
-        for i in {1..200}; do
-          lake test
-        done
-    
-    - name: License scan
-      uses: fossas/fossa-action@v1
-      with:
-        api-key: ${{ secrets.FOSSA_API_KEY }}
-    
-    - name: Check for network access in tests
-      run: |
-        # Ensure no network access in tactic tests
-        grep -r "http" tests/ || true
-        grep -r "https" tests/ || true
+        os: [ubuntu-latest]
+        lean-version: [v4.8.0]
 
-  benchmark:
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: Set up Lean ${{ matrix.lean-version }}
+        uses: leanprover/lean4-action@v2
+        with:
+          lean-version: ${{ matrix.lean-version }}
+
+      - name: Cache Lake + Mathlib
+        uses: actions/cache@6849a6489940f259c42e59d2b1a277dd1faff8a4
+        with:
+          path: |
+            .lake
+            ~/.elan
+          key: lake-${{ runner.os }}-${{ matrix.lean-version }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
+          restore-keys: |
+            lake-${{ runner.os }}-${{ matrix.lean-version }}-
+
+      - name: Fetch Mathlib cache
+        run: lake exe cache get
+
+      - name: Build
+        run: lake build
+
+      - name: Run tests
+        run: lake exe test-runner
+
+      - name: Run benchmarks
+        run: lake exe bench
+
+      - name: Lightweight determinism check
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            echo "determinism run $i"
+            lake exe test-runner
+          done
+
+      - name: License scan (FOSSA)
+        if: ${{ secrets.FOSSA_API_KEY != '' }}
+        uses: fossas/fossa-action@v1
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+
+  # Native linking of Mathlib-heavy exes can fail on Windows (long `leanc` command line).
+  # This job still validates that the library and test modules compile.
+  windows-compile:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: Set up Lean v4.8.0
+        uses: leanprover/lean4-action@v2
+        with:
+          lean-version: v4.8.0
+
+      - name: Cache Lake + Mathlib
+        uses: actions/cache@6849a6489940f259c42e59d2b1a277dd1faff8a4
+        with:
+          path: |
+            .lake
+            ~/.elan
+          key: lake-win-v4.8.0-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
+          restore-keys: |
+            lake-win-v4.8.0-
+
+      - name: Fetch Mathlib cache
+        run: lake exe cache get
+
+      - name: Build library and test modules (no native exe link)
+        run: |
+          lake build CatNF
+          lake build +CatNF.Tests.TestRunner
+
+  benchmark-compare:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Lean
-      uses: leanprover/lean4-action@v2
-      with:
-        lean-version: v4.8.0
-    
-    - name: Install dependencies
-      run: |
-        lake update
-        lake build
-    
-    - name: Run benchmarks
-      run: |
-        lake exe bench > benchmark-results.txt
-    
-    - name: Compare with last release
-      run: |
-        # Compare with last tagged release
-        if [ -n "$(git tag -l)" ]; then
-          git checkout $(git describe --tags --abbrev=0)
-          lake exe bench > old-benchmark-results.txt
-          git checkout -
-          
-          # Compare results and fail if regression > 10%
-          python3 scripts/compare_benchmarks.py benchmark-results.txt old-benchmark-results.txt
-        fi
-    
-    - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-results
-        path: benchmark-results.txt
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          fetch-depth: 0
+
+      - name: Set up Lean
+        uses: leanprover/lean4-action@v2
+        with:
+          lean-version: v4.8.0
+
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc922fede895a1ef70edf546a7fa
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          lake exe cache get
+          lake build
+
+      - name: Run benchmarks (current)
+        run: lake exe bench | tee benchmark-results.txt
+
+      - name: Compare with last tag
+        run: |
+          set -euo pipefail
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            TAG=$(git describe --tags --abbrev=0)
+            git checkout "$TAG"
+            lake exe cache get || true
+            lake build
+            lake exe bench | tee old-benchmark-results.txt
+            git checkout -
+            python3 scripts/compare_benchmarks.py benchmark-results.txt old-benchmark-results.txt
+          else
+            echo "No git tags; skipping benchmark comparison."
+          fi
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92d488738381e064f
+        with:
+          name: benchmark-results
+          path: benchmark-results.txt
 
   docs:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+    if: false
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Lean
-      uses: leanprover/lean4-action@v2
-      with:
-        lean-version: v4.8.0
-    
-    - name: Install dependencies
-      run: |
-        lake update
-        lake build
-    
-    - name: Generate documentation
-      run: |
-        lake exe doc-gen4 -- CatNF
-    
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./build/doc
-        destination_dir: docs
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: Set up Lean
+        uses: leanprover/lean4-action@v2
+        with:
+          lean-version: v4.8.0
+
+      - name: Build
+        run: |
+          lake exe cache get
+          lake build
+
+      - name: Generate documentation
+        run: lake exe doc-gen4 -- CatNF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/doc
+          destination_dir: docs

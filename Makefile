@@ -160,7 +160,7 @@ lint: ## Lint code (using Lean's built-in linting)
 
 docs: ## Generate documentation
 	@echo "Generating documentation..."
-	@export PATH="$$HOME/.elan/bin:$$PATH" && lake exe docs || echo "Documentation generation requires doc-gen4"
+	@export PATH="$$HOME/.elan/bin:$$PATH" && lake build docs || echo "See CONTRIBUTING.md for doc-gen4 setup"
 
 # Utility targets
 info: ## Show project information

@@ -1,0 +1,38 @@
+name: Quality gates
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  sorry-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - name: Scan for sorry / admit in library sources
+        run: |
+          set -euo pipefail
+          if grep -RInE '(^|[[:space:]])(sorry|admit)([[:space:]]|$)' src/CatNF --include='*.lean'; then
+            echo "Found sorry/admit tokens in src/CatNF (see lines above)."
+            exit 1
+          fi
+          echo "No sorry/admit tokens matched in src/CatNF."
+      - name: Scan for sorry / admit in benchmarks
+        run: |
+          set -euo pipefail
+          if [ -d src/bench ]; then
+            if grep -RInE '(^|[[:space:]])(sorry|admit)([[:space:]]|$)' src/bench --include='*.lean'; then
+              echo "Found sorry/admit tokens in src/bench (see lines above)."
+              exit 1
+            fi
+          fi
+          echo "No sorry/admit tokens matched in src/bench (or directory absent)."
+      - name: Scan for bare axiom declarations in CatNF
+        run: |
+          set -euo pipefail
+          if grep -RInE '^[[:space:]]*axiom[[:space:]]+' src/CatNF --include='*.lean'; then
+            echo "Found axiom declarations in src/CatNF (see lines above)."
+            exit 1
+          fi
+          echo "No axiom declarations matched in src/CatNF."

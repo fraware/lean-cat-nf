@@ -1,218 +1,165 @@
 <div align="center">
 
-# **CatNF** 
-## *Category Normal Form for Lean 4*
+# CatNF
 
-[![Lean 4](https://img.shields.io/badge/Lean%204-0.0.1-blue.svg)](https://leanprover.github.io/lean4/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green.svg)](https://github.com/fraware/lean-cat-nf)
+### Category normal form for Lean 4
+
+Normalize category-theoretic morphism expressions inside Lean’s metaprogramming layer—composition, identities, functorial maps, monoidal structure, and more—behind a configurable, validated pipeline.
+
+<br/>
+
+[![Lean 4.8](https://img.shields.io/badge/Lean-4.8.0-5c6bc0?style=flat-square)](https://leanprover.github.io/lean4/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-546e7a?style=flat-square)](LICENSE)
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-78909c?style=flat-square)](.github/workflows/ci.yml)
+
+<br/>
+
+[Contributing](CONTRIBUTING.md) · [Canonical forms](docs/WhatCountsAsCanonical.md) · [Versions](docs/Compatibility.md) · [Issues](https://github.com/fraware/lean-cat-nf/issues)
+
+</div>
 
 ---
 
-</div>
+## Overview
 
-## **Overview**
-
-CatNF provides a robust solution for normalizing category theory expressions in Lean 4.
-
-<div align="center">
+CatNF validates configuration, flattens and rewrites morphism structure (composition, functors, monoidal pieces, and related rules), and returns a normalized `Expr` plus optional trace data.
 
 ```mermaid
-graph TD
-    A[Expression Input] --> B[Input Validation]
-    B --> C[Configuration Check]
-    C --> D[Normalization Engine]
-    D --> E[Rewrite Rules]
-    D --> F[Monoidal Processing]
-    D --> G[Caching Layer]
-    E --> H[Result Validation]
-    F --> H
-    G --> H
-    H --> I[Output Expression]
-    
-    style A fill:#e1f5fe
-    style I fill:#e8f5e8
-    style D fill:#fff3e0
-    style H fill:#f3e5f5
+flowchart LR
+  subgraph in["Input"]
+    E(["Lean Expr"])
+  end
+  subgraph pipe["Pipeline"]
+    V[Validate]
+    N[Flatten & rules]
+    M[Monoidal]
+    C[Caches & limits]
+  end
+  subgraph out["Output"]
+    R(["Normalized Expr"])
+  end
+  E --> V --> N --> M --> C --> R
+  style E fill:#e3f2fd,stroke:#5c6bc0
+  style R fill:#e8f5e9,stroke:#43a047
+  style V fill:#f5f5f5,stroke:#9e9e9e
+  style N fill:#fff8e1,stroke:#ffa726
+  style M fill:#fce4ec,stroke:#ec407a
+  style C fill:#f3e5f5,stroke:#ab47bc
 ```
 
-</div>
+---
 
-## **Quickstart** 🚀
+## Quickstart
 
-### **Docker (Recommended)**
-
-Get started in seconds with Docker:
+### Docker
 
 ```bash
-# Run the help command
 docker run --rm ghcr.io/fraware/lean-cat-nf:latest --help
-
-# Run benchmarks
 docker run --rm ghcr.io/fraware/lean-cat-nf:latest bench
-
-# Run tests
 docker run --rm ghcr.io/fraware/lean-cat-nf:latest test
+docker run --rm ghcr.io/fraware/lean-cat-nf:latest test-final
 ```
 
-### **One-Command Installation**
-
-Install and run in one command:
+### One-liner install
 
 ```bash
-# Linux/macOS
+# Linux / macOS
 curl -sSL https://raw.githubusercontent.com/fraware/lean-cat-nf/main/setup.sh | bash
+```
 
-# Windows (PowerShell)
+```powershell
+# Windows
 iwr -useb https://raw.githubusercontent.com/fraware/lean-cat-nf/main/setup.bat | iex
 ```
 
-### **Local Installation**
-
-For development or local use:
+### From source
 
 ```bash
-# Clone the repository
 git clone https://github.com/fraware/lean-cat-nf.git
 cd lean-cat-nf
-
-# One-command setup
 make dev
-
-# Run the project
 make run
 make test
 make bench
 ```
 
-### **Global Installation**
+After `make dev`, optional global install: `make install`, then `lean-cat-nf --help`.
 
-Install globally on your system:
+---
 
-```bash
-git clone https://github.com/fraware/lean-cat-nf.git
-cd lean-cat-nf
-make dev
-make install
+## Add CatNF to a Lake project
 
-# Now use from anywhere
-lean-cat-nf --help
+Use the package name from [`Lakefile.lean`](Lakefile.lean) (here `«lean-cat-nf»`). Prefer a **commit SHA** over `main` when you need reproducibility.
+
+```lean
+require «lean-cat-nf» from git
+  "https://github.com/fraware/lean-cat-nf.git" @ "main"
 ```
 
 ---
 
-## **Installation**
+## Usage
 
-### **As a Lean 4 Library**
-
-Add CatNF to your Lean 4 project by including it in your `lakefile.lean`:
+There is no shipped `cat_nf` tactic syntax yet. Call `normalizeGoalM` or `catNFImpl` on a `Lean.Expr` from ordinary metaprogramming code.
 
 ```lean
-require catnf from git "https://github.com/fraware/lean-cat-nf.git"
-```
-
-### **Development Setup**
-
-For contributing or advanced usage:
-
-```bash
-# Install dependencies and build
-make dev
-
-# Available commands
-make help        # Show all available commands
-make test        # Run test suite
-make bench       # Run benchmarks
-make clean       # Clean build artifacts
-make docs        # Generate documentation
-```
-
----
-
-## **Usage Examples**
-
-### **Basic Usage**
-
-Get started with simple category theory normalization:
-
-```lean
-import CatNF.Tactic
-
--- Basic normalization
-example : f ≫ g ≫ h = f ≫ (g ≫ h) := by
-  cat_nf
-
--- With tracing for debugging
-example : f ≫ g ≫ h = f ≫ (g ≫ h) := by
-  cat_nf?
-```
-
-### **Advanced Configuration**
-
-For production environments with custom requirements:
-
-```lean
+import Mathlib.CategoryTheory.Category.Basic
+import Lean.Meta
 import CatNF.Core
-import CatNF.Tactic
 
--- Custom configuration
-def customNormalize (expr : Expr) : MetaM (Expr × List AppliedRewrite) := do
-  let config : Config := { 
-    maxSteps := 1000, 
-    timeoutMs := 3000, 
-    monoidal := true, 
-    trace := true,
-    simpSet := some "custom"
+open Lean Meta CatNF
+
+def demoNormalize (e : Expr) : MetaM (Expr × List AppliedRewrite) := do
+  let config : Config := {
+    maxSteps := 100
+    timeoutMs := 2000
+    monoidal := true
+    trace := false
+    simpSet := none
   }
-  normalizeGoal expr config
-
--- Production-safe normalization with error handling
-def safeNormalize (expr : Expr) : MetaM (Option (Expr × List AppliedRewrite)) := do
-  try
-    let config : Config := { 
-      maxSteps := 500, 
-      timeoutMs := 1500, 
-      monoidal := true, 
-      trace := false 
-    }
-    let result ← normalizeGoal expr config
-    return some result
-  catch e =>
-    logError s!"Normalization failed: {e}"
-    return none
+  normalizeGoalM e config
 ```
 
-## **Configuration**
+Working examples live under `src/CatNF/Tests/`. For what “canonical” means in this project, see [What counts as canonical?](docs/WhatCountsAsCanonical.md).
 
-CatNF offers extensive configuration options for fine-tuning behavior in different environments:
+### Configuration at a glance
+
+`Config` carries step and time limits, tracing, optional simp-set name, and resource knobs (caching, parallelism, cache size, memory budget). See [`src/CatNF/Core.lean`](src/CatNF/Core.lean) for the full structure and `validateConfig` / `createConfig`.
 
 ```lean
-structure Config where
-  maxSteps : Nat := 500          -- Maximum normalization steps
-  timeoutMs : Nat := 1500        -- Timeout in milliseconds
-  monoidal : Bool := true        -- Enable monoidal normalization
-  trace : Bool := false          -- Enable tracing
-  simpSet : Option String := none -- Custom simp set
-  deriving Repr, Inhabited
+def prodConfig : Config := {
+  maxSteps := 1000
+  timeoutMs := 3000
+  monoidal := true
+  trace := true
+  simpSet := some "custom"
+  enableCaching := true
+  enableParallel := true
+  enableEarlyTermination := true
+  maxWorkers := 4
+  cacheSize := 10000
+  maxMemoryBytes := 100000000
+}
 ```
 
-### **Configuration Validation**
+| Field | Default | Typical bound |
+|-------|---------|----------------|
+| `maxSteps` | 500 | 1 – 10 000 |
+| `timeoutMs` | 1500 | 1 – 30 000 ms |
+| `simpSet` | `none` | 1 – 100 chars if set |
+| `maxWorkers` | 4 | 1 – 32 |
+| `cacheSize` | 10000 | 1 – 1 000 000 |
+| `maxMemoryBytes` | 100000000 | up to 1 GB (enforced by validator) |
 
-<div align="center">
+---
 
-| Parameter | Range | Default | Description |
-|-----------|-------|---------|-------------|
-| `maxSteps` | 1-10000 | 500 | Maximum normalization steps |
-| `timeoutMs` | 1-30000 | 1500 | Timeout in milliseconds |
-| `simpSet` | 1-100 chars | `none` | Custom simp set name |
+## Design notes
 
-</div>
+**Errors.** Failures use `CatNFError` (timeout, validation, normalization, configuration, internal) instead of silent corruption.
 
-All configuration parameters undergo comprehensive validation with bounds checking to ensure system stability and prevent resource exhaustion.
+**Validation.** Expressions and internal segment lists are checked before heavy work; bad configuration is rejected with explicit messages.
 
-## **Error Handling**
-
-CatNF implements enterprise-grade error handling with custom exception types and graceful degradation patterns:
+**Performance.** The pipeline respects step and time limits, can stop early when nothing changes, and exposes caching and parallelism flags on `Config`.
 
 ```lean
 inductive CatNFError where
@@ -223,327 +170,102 @@ inductive CatNFError where
   | internalError (message : String) : CatNFError
 ```
 
-### **Graceful Degradation Strategy**
+---
 
-<div align="center">
+## Testing
 
-```mermaid
-flowchart TD
-    A[Operation Start] --> B{Operation Type}
-    B -->|Simp| C[Simp Operation]
-    B -->|Rule| D[Rule Application]
-    B -->|Tactic| E[Tactic Execution]
-    
-    C --> F{Success?}
-    D --> G{Success?}
-    E --> H{Success?}
-    
-    F -->|Yes| I[Return Result]
-    F -->|No| J[Return Original Expression]
-    
-    G -->|Yes| I
-    G -->|No| K[Continue with Other Rules]
-    
-    H -->|Yes| I
-    H -->|No| L[Provide Clear Error Message]
-    
-    K --> I
-    J --> I
-    L --> M[Log Error & Continue]
-    
-    style A fill:#e3f2fd
-    style I fill:#e8f5e8
-    style J fill:#fff3e0
-    style L fill:#ffebee
-```
+| Command | What it does |
+|---------|----------------|
+| `lake test` / `lake exe test-runner` | Full suite |
+| `lake exe bench` | Benchmarks |
+| `make test` / `make bench` | Makefile wrappers |
 
-</div>
+On Windows, linking the test executable can fail when the toolchain command line is too long—see [CONTRIBUTING.md](CONTRIBUTING.md). CI runs the full suite on Linux and a compile check on Windows; scheduled jobs also scan the tree for disallowed `sorry`, `admit`, and unexpected `axiom` declarations where the project enforces none.
 
-**Key Degradation Patterns:**
-- **Simp Operations**: Return original expression on failure
-- **Rule Application**: Continue with remaining rules if one fails
-- **Tactic Execution**: Provide clear error messages and continue processing
+| Area | Location |
+|------|----------|
+| Unit | `src/CatNF/Tests/Unit/` |
+| Integration | `src/CatNF/Tests/Integration/` |
+| Performance | `src/CatNF/Tests/Performance/` |
+| Determinism | `src/CatNF/Tests/Determinism/` |
 
-## **Input Validation**
+---
 
-CatNF implements comprehensive input validation to ensure system stability and prevent runtime errors:
+## API reference
 
-### **Expression Validation**
-- **Metavariable Checks**: Prevent processing of metavariables
-- **Type Validation**: Ensure expressions have correct types
-- **Structure Validation**: Validate expression structure and nesting
-
-### **Segment Validation**
-- **Well-formedness**: Ensure segments are well-formed
-- **Bounds Checking**: Validate segment list lengths
-- **Type Safety**: Ensure type safety of segment components
-
-### **Configuration Validation**
-- **Parameter Bounds**: Validate all configuration parameters
-- **Value Ranges**: Ensure parameters are within acceptable ranges
-- **Consistency**: Validate parameter consistency
-
-<div align="center">
-
-| Validation Type | Checks Performed | Failure Action |
-|----------------|------------------|----------------|
-| **Expression** | Metavariables, Types, Structure | Reject with error |
-| **Segment** | Well-formedness, Bounds, Type Safety | Reject with error |
-| **Configuration** | Parameter bounds, Ranges, Consistency | Reject with error |
-
-</div>
-
-## **Timeout Management**
-
-CatNF implements sophisticated timeout management to prevent resource exhaustion:
-
-<div align="center">
-
-| Resource Type | Default | Maximum | Description |
-|---------------|---------|---------|-------------|
-| **Maximum Steps** | 500 | 10,000 | Normalization step limit |
-| **Timeout Duration** | 1,500ms | 30,000ms | Operation timeout |
-| **Recursion Depth** | 50 | 100 | Maximum recursion depth |
-| **Loop Iterations** | 500 | 1,000 | Maximum loop iterations |
-
-</div>
-
-## **Performance Optimization**
-
-CatNF employs multiple optimization strategies for production-level performance:
-
-### **Early Termination Strategies**
-- **No Change Detection**: Stop when no further changes are possible
-- **Timeout Detection**: Stop when timeout is reached
-- **Step Limit Detection**: Stop when step limit is reached
-
-### **Intelligent Caching System**
-- **Coherence Cache**: Cache canonical isomorphisms
-- **Rule Cache**: Cache rule application results
-- **Segment Cache**: Cache segment processing results
-
-### **Lazy Evaluation Patterns**
-- **Conditional Processing**: Only process when necessary
-- **Deferred Computation**: Defer expensive operations
-- **Incremental Updates**: Update only what has changed
-
-<div align="center">
-
-```mermaid
-graph LR
-    A[Input] --> B{Cache Hit?}
-    B -->|Yes| C[Return Cached]
-    B -->|No| D[Process]
-    D --> E{Change Detected?}
-    E -->|Yes| F[Continue]
-    E -->|No| G[Early Termination]
-    F --> H{Timeout?}
-    H -->|Yes| I[Return Partial]
-    H -->|No| J[Update Cache]
-    J --> K[Return Result]
-    G --> K
-    C --> K
-    I --> K
-    
-    style A fill:#e3f2fd
-    style K fill:#e8f5e8
-    style I fill:#fff3e0
-```
-
-</div>
-
-## **Testing**
-
-CatNF includes comprehensive testing infrastructure ensuring production reliability:
-
-### **Error Handling Tests**
-- **Exception Testing**: Test all exception conditions
-- **Recovery Testing**: Test error recovery mechanisms
-- **Degradation Testing**: Test graceful degradation
-
-### **Validation Tests**
-- **Input Validation**: Test input validation
-- **Boundary Testing**: Test at boundary conditions
-- **Edge Case Testing**: Test edge cases and corner cases
-
-### **Performance Tests**
-- **Load Testing**: Test under various loads
-- **Stress Testing**: Test under extreme conditions
-- **Memory Testing**: Test memory usage patterns
-
-<div align="center">
-
-| Test Category | Coverage | Status | Description |
-|---------------|----------|--------|-------------|
-| **Unit Tests** | 95%+ | ✅ Complete | Individual component testing |
-| **Integration Tests** | 90%+ | ✅ Complete | End-to-end workflow testing |
-| **Performance Tests** | 100% | ✅ Complete | Load and stress testing |
-| **Error Handling** | 100% | ✅ Complete | Exception and recovery testing |
-
-</div>
-
-## **API Reference**
-
-### **Core Functions**
-
-The main normalization and processing functions:
+<details>
+<summary>Core (<code>CatNF.Core</code>)</summary>
 
 ```lean
--- Main normalization function
 def normalizeGoal (goal : Expr) (config : Config) : CatNFM (Expr × List AppliedRewrite)
-
--- Configuration validation
+def normalizeGoalM (goal : Expr) (config : Config) : MetaM (Expr × List AppliedRewrite)
 def validateConfig (config : Config) : CatNFM Unit
-
--- Expression flattening
 def flattenComposition (expr : Expr) (config : Config) : CatNFM (List ExprSegment)
-
--- Segment validation
 def validateExprSegment (seg : ExprSegment) : CatNFM Unit
 def validateExprSegments (segs : List ExprSegment) : CatNFM Unit
 ```
 
-### **Tactic Functions**
+</details>
 
-Lean 4 tactic implementations:
+<details>
+<summary>Tactic layer (<code>CatNF.Tactic</code>)</summary>
 
 ```lean
--- Main tactic implementation
 def catNFImpl (goal : Expr) (config : Config) : MetaM Unit
-
--- Tactic for normalizing hypotheses
 def catNFAtImpl (hyp : FVarId) (config : Config) : MetaM Unit
-
--- Tactic with tracing
 def catNFTraceImpl (goal : Expr) (config : Config) : MetaM (List AppliedRewrite)
 ```
 
-### **Attribute Functions**
+</details>
 
-Rule registration and management:
+<details>
+<summary><strong>Rewrite registry</strong> — <code>CatNF.RewriteRules</code></summary>
 
 ```lean
--- Register isomorphism rule
-def registerIsoRule (name : Name) (schema : RewriteSchema) 
-  (isUnsafe : Bool := false) (priority : Nat := 0) 
+def registerIsoRule (ruleName : Name) (schema : RewriteSchema)
+  (isUnsafe : Bool := false) (priority : Nat := 0)
   (description : String := "") : CatNFM Unit
-
--- Get registered rules
 def getRegisteredRules : CatNFM (Array RuleEntry)
-
--- Apply rewrite rule
-def applyRewriteRule (rule : RuleEntry) (expr : Expr) : CatNFM (Option Expr)
+/-- Not yet implemented: returns none for now. -/
+def applyRewriteRule (_rule : RuleEntry) (_expr : Expr) : CatNFM (Option Expr)
 ```
 
-## **Examples**
+</details>
 
-### **Basic Category Theory**
-
-Fundamental category theory laws and properties:
+<details>
+<summary>Attribute helpers (<code>CatNF.Attr</code>)</summary>
 
 ```lean
-import CatNF.Tactic
-
--- Identity laws
-example : f ≫ id = f := by cat_nf
-example : id ≫ f = f := by cat_nf
-
--- Associativity
-example : (f ≫ g) ≫ h = f ≫ (g ≫ h) := by cat_nf
-
--- Functor laws
-example : F.map (f ≫ g) = F.map f ≫ F.map g := by cat_nf
+def validateIsoDeclaration (decl : IsoDeclPreview) : MetaM Bool
+def validateRule (nm : Name) : MetaM Bool
+def extractRewriteSchema (decl : IsoDeclPreview) : MetaM RewriteSchema
 ```
 
-### **Monoidal Categories**
+</details>
 
-Advanced monoidal category operations:
+### Registering an isomorphism rule
 
 ```lean
-import CatNF.Tactic
+import CatNF.RewriteRules
+import CatNF.Core
 
--- Tensor associativity
-example : (f ⊗ g) ⊗ h = f ⊗ (g ⊗ h) := by cat_nf
-
--- Unit laws
-example : 𝟙 ⊗ f = f := by cat_nf
-example : f ⊗ 𝟙 = f := by cat_nf
-
--- Braiding
-example : f ⊗ g = g ⊗ f := by cat_nf
+def mySchema : RewriteSchema := {
+  homRule := `MyNamespace.MyIso.hom,
+  invRule := `MyNamespace.MyIso.inv,
+  homInvId := `MyNamespace.MyIso.hom_inv_id,
+  invHomId := `MyNamespace.MyIso.inv_hom_id
+}
+-- registerIsoRule `MyNamespace.MyIso mySchema  (inside CatNF’s error monad)
 ```
-
-### **Custom Rules**
-
-Extending CatNF with custom isomorphism rules:
-
-```lean
-import CatNF.Attr
-
--- Register custom isomorphism rule
-@[cat_nf.iso]
-def myIsoRule (f : X ⟶ Y) : f ≅ f := by sorry
-
--- Use custom rule
-example : f ≅ f := by cat_nf
-```
-
-## **Best Practices**
-
-### **Configuration Guidelines**
-- Use appropriate timeout values for your use case
-- Enable tracing for debugging and development
-- Set reasonable step limits based on expression complexity
-- Use monoidal normalization when working with monoidal categories
-
-### **Error Handling Strategies**
-- Always handle exceptions appropriately
-- Use graceful degradation when possible
-- Log errors for debugging and monitoring
-- Provide meaningful error messages to users
-
-### **Performance Optimization**
-- Monitor step counts and timeouts in production
-- Use caching when appropriate for repeated operations
-- Avoid unnecessary computation through lazy evaluation
-- Profile performance-critical code regularly
-
-<div align="center">
-
-| Practice Category | Recommendation | Impact |
-|------------------|----------------|---------|
-| **Configuration** | Set timeouts based on complexity | High |
-| **Error Handling** | Implement graceful degradation | Critical |
-| **Performance** | Monitor and profile regularly | High |
-| **Testing** | Maintain comprehensive test coverage | Critical |
-
-</div>
 
 ---
 
-## **Contributing**
+## Contributing & license
 
-We welcome contributions to CatNF! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for build commands, Windows notes, and review expectations.
 
-- Code style and standards
-- Testing requirements
-- Documentation guidelines
-- Pull request process
+Licensed under the [MIT License](LICENSE).
 
-## **License**
+Thanks to the Lean 4 team, the Mathlib community, and everyone who has improved this project.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## **Acknowledgments**
-
-- **Lean 4 Community** for the excellent proof assistant
-- **Mathlib Community** for the comprehensive category theory library
-- **All Contributors** who have helped improve this project
-
-## **Support**
-
-For support and questions:
-
-- Check the [documentation](docs/)
-- Open an [issue](https://github.com/fraware/lean-cat-nf/issues)
-- Join our [discussions](https://github.com/fraware/lean-cat-nf/discussions)
+For questions, see [docs/](docs/) and the links under the title, or open an [issue](https://github.com/fraware/lean-cat-nf/issues). Repository discussions are available when enabled.

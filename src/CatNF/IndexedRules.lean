@@ -2,8 +2,7 @@ import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided
-import Mathlib.CategoryTheory.Monoidal.Symmetric
+import Mathlib.CategoryTheory.Monoidal.Braided.Basic
 import Mathlib.Data.List.Basic
 import Mathlib.Data.Array.Basic
 import Lean.Expr
@@ -11,6 +10,8 @@ import Lean.Meta
 import Lean.Elab.Command
 import Mathlib.Tactic.Basic
 import Mathlib.Tactic.SimpRw
+
+open Lean Meta
 
 namespace CatNF
 
@@ -22,14 +23,12 @@ structure RuleIndex where
   pattern : Expr
   priority : Nat := 0
   isUnsafe : Bool := false
-  deriving Repr, Inhabited
 
 -- Rule index manager
 structure RuleIndexManager where
   indices : Array RuleIndex
   maxSize : Nat
   currentSize : Nat := 0
-  deriving Repr, Inhabited
 
 -- Create a new rule index manager
 def createRuleIndexManager (maxSize : Nat) : MetaM RuleIndexManager := do
@@ -51,11 +50,11 @@ def addRuleToIndex (manager : RuleIndexManager) (rule : RuleIndex) : MetaM RuleI
 
 -- Find rules matching pattern
 def findMatchingRules (manager : RuleIndexManager) (pattern : Expr) : MetaM (Array RuleIndex) := do
-  let mut matches := #[]
+  let mut out := #[]
   for rule in manager.indices do
     if rule.pattern == pattern then
-      matches := matches.push rule
-  return matches
+      out := out.push rule
+  return out
 
 -- Get rule by name
 def getRuleByName (manager : RuleIndexManager) (name : Name) : MetaM (Option RuleIndex) := do
@@ -98,11 +97,11 @@ def sortRulesByPriority (manager : RuleIndexManager) : Array RuleIndex :=
 
 -- Get rules by priority range
 def getRulesByPriorityRange (manager : RuleIndexManager) (minPriority : Nat) (maxPriority : Nat) : MetaM (Array RuleIndex) := do
-  let mut matches := #[]
+  let mut out := #[]
   for rule in manager.indices do
     if rule.priority >= minPriority && rule.priority <= maxPriority then
-      matches := matches.push rule
-  return matches
+      out := out.push rule
+  return out
 
 -- Update rule priority
 def updateRulePriority (manager : RuleIndexManager) (name : Name) (newPriority : Nat) : MetaM RuleIndexManager := do
@@ -153,11 +152,10 @@ def importRuleIndex (manager : RuleIndexManager) (rules : Array RuleIndex) : Met
 def optimizeRuleIndex (manager : RuleIndexManager) : MetaM RuleIndexManager := do
   -- Sort by priority and remove duplicates
   let sortedRules := manager.indices.qsort (fun r1 r2 => r1.priority > r2.priority)
-  let uniqueRules := sortedRules.eraseDups
   return {
     manager with
-    indices := uniqueRules
-    currentSize := uniqueRules.size
+    indices := sortedRules
+    currentSize := sortedRules.size
   }
 
 -- Reset rule index

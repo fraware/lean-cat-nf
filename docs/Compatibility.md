@@ -1,115 +1,67 @@
-# Compatibility Table
+# Compatibility
 
-This table shows the compatibility between `lean-cat-nf` versions and Lean 4/Mathlib4 versions.
+This document describes how **lean-cat-nf** tracks **Lean 4** and **Mathlib4**, and how to depend on the package from another Lake project.
 
-## Lean 4 Compatibility
+## Pinned versions (source of truth)
 
-| lean-cat-nf | Lean 4 | Status |
-|-------------|--------|--------|
-| v1.0.0      | v4.8.0 | ✅ Supported |
-| v1.0.0      | v4.7.0 | ✅ Supported |
-| v1.0.0      | v4.6.0 | ❌ Not supported |
-| v0.9.0      | v4.8.0 | ✅ Supported |
-| v0.9.0      | v4.7.0 | ✅ Supported |
-| v0.9.0      | v4.6.0 | ❌ Not supported |
+| Component | Source | Current pin (as of this doc revision) |
+|-----------|--------|----------------------------------------|
+| Lean 4 | [`lean-toolchain`](../lean-toolchain) | `leanprover/lean4:v4.8.0` |
+| Mathlib4 | [`Lakefile.lean`](../Lakefile.lean) `require mathlib` | tag `v4.8.0` |
 
-## Mathlib4 Compatibility
+When these files change, treat that as the supported pair until the next bump.
 
-| lean-cat-nf | Mathlib4 | Status |
-|-------------|----------|--------|
-| v1.0.0      | v4.8.0   | ✅ Supported |
-| v1.0.0      | v4.7.0   | ✅ Supported |
-| v1.0.0      | v4.6.0   | ❌ Not supported |
-| v0.9.0      | v4.8.0   | ✅ Supported |
-| v0.9.0      | v4.7.0   | ✅ Supported |
-| v0.9.0      | v4.6.0   | ❌ Not supported |
+## Version tags
 
-## Versioning Policy
+Semantic version tags may be added over time for releases. Until you rely on a published tag, pin a **Git revision** (commit SHA) in your `lakefile.lean` for reproducibility.
 
-### Semantic Versioning (SemVer)
+## Depending on lean-cat-nf (Lake)
 
-- **MAJOR**: Incremented for changes in tactic behavior
-- **MINOR**: Incremented for the addition of new normalizers
-- **PATCH**: Incremented for performance improvements and bug fixes
-
-### Breaking Changes
-
-- **v1.0.0**: Initial stable release
-- **v0.9.0**: Pre-release with experimental features
-
-### Migration Guide
-
-#### From v0.9.0 to v1.0.0
-
-No breaking changes. The API is stable.
-
-#### From v0.8.0 to v0.9.0
-
-- Added monoidal category support
-- Changed default configuration options
-- Updated performance targets
-
-## Installation
-
-### Latest Stable (v1.0.0)
+The package name in this repository is `«lean-cat-nf»`. Example:
 
 ```lean
-require lean-cat-nf from git
-  "https://github.com/fraware/lean-cat-nf.git" @ "v1.0.0"
-```
-
-### Latest Development
-
-```lean
-require lean-cat-nf from git
+require «lean-cat-nf» from git
   "https://github.com/fraware/lean-cat-nf.git" @ "main"
 ```
 
-### Specific Version
+Replace `"main"` with a tag or revision string as needed:
 
 ```lean
-require lean-cat-nf from git
-  "https://github.com/fraware/lean-cat-nf.git" @ "v0.9.0"
+require «lean-cat-nf» from git
+  "https://github.com/fraware/lean-cat-nf.git" @ "abc1234deadbeef..."
 ```
 
-## Testing Compatibility
+Then import modules such as `CatNF.Core`, `CatNF.Tactic`, `CatNF.RewriteRules` (see [README.md](../README.md)).
 
-To test if your setup is compatible:
+## Mathlib / Lean bump (contributors)
 
-```lean
-import Mathlib.Tactic.CatNF
+1. Choose a Mathlib release tag that matches the target Lean (see [mathlib4 releases](https://github.com/leanprover-community/mathlib4/releases)).
+2. Update [`lean-toolchain`](../lean-toolchain).
+3. Point `require mathlib` in [`Lakefile.lean`](../Lakefile.lean) at the same tag.
+4. Run `lake update` and `lake build`; fix breakages in `src/CatNF/` and tests.
+5. Run `lake exe test-runner` before opening a PR.
 
--- Basic functionality test
-example (f : X ⟶ Y) : f ≫ 𝟙 Y = f := by
-  cat_nf
+Details: [CONTRIBUTING.md](../CONTRIBUTING.md).
 
--- Monoidal functionality test
-example (f : X ⟶ Y) (g : Y ⟶ Z) : (f ⊗ g) ⊗ h = f ⊗ (g ⊗ h) := by
-  cat_nf
+## Verifying a local setup
+
+```bash
+lake exe cache get
+lake build
+lake exe test-runner
 ```
 
-## Reporting Issues
+## Reporting issues
 
-If you encounter compatibility issues:
+Include:
 
-1. Check this table for supported versions
-2. Try updating to the latest version
-3. Create an issue with:
-   - Your Lean 4 version
-   - Your Mathlib4 version
-   - Your lean-cat-nf version
-   - A minimal reproduction case
+- Lean version (`lean-toolchain`)
+- Mathlib pin (`Lakefile.lean` / `lake-manifest.json`)
+- lean-cat-nf revision (commit or tag)
+- Minimal repro or failing `lake` / test output
 
-## Future Compatibility
+## Policy (informal)
 
-We plan to support:
-
-- **Lean 4**: Latest and previous minor versions
-- **Mathlib4**: Latest and previous minor versions
-- **Backward compatibility**: At least 2 major versions
-
-## Deprecation Policy
-
-- **Deprecation warnings**: 6 months before removal
-- **Breaking changes**: Only in major versions
-- **Migration guides**: Provided for all breaking changes
+- **Main branch** is expected to build with the pinned Lean and Mathlib versions in the repo.
+- Breaking API changes should be called out in commit messages and release notes when you use version tags.
+- There is no built-in `cat_nf` tactic yet; use the normalization functions described in [README.md](../README.md).

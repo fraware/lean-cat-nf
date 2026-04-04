@@ -2,8 +2,7 @@ import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided
-import Mathlib.CategoryTheory.Monoidal.Symmetric
+import Mathlib.CategoryTheory.Monoidal.Braided.Basic
 import Mathlib.CategoryTheory.Whiskering
 import Mathlib.Data.List.Basic
 import Mathlib.Data.Array.Basic
@@ -14,10 +13,8 @@ import Lean.Meta
 import Lean.Elab.Tactic
 import Lean.Elab.Command
 import Lean.CoreM
-import Lean.MonadLift
-import CatNF.Cache
-import CatNF.IndexedRules
-import CatNF.ParallelProcessing
+
+open Lean Meta
 
 namespace CatNF
 
@@ -44,12 +41,19 @@ instance : ToString CatNFError where
 /-- Exception handling monad transformer for CatNF operations -/
 abbrev CatNFM (α : Type) := ExceptT CatNFError MetaM α
 
-/-- Lift MetaM operations to CatNFM with proper error handling -/
-def liftMetaM {α : Type} (action : MetaM α) : CatNFM α := do
-  try
-    liftM action
-  catch e =>
-    throw (.internalError s!"MetaM operation failed: {e}")
+/-- Disambiguate `throw` from `MetaM`'s `MonadExceptOf Exception` when stacked with `ExceptT`. -/
+@[inline] def throwCatNF {α : Type} (e : CatNFError) : CatNFM α :=
+  throwThe CatNFError e
+
+/-- Lift MetaM operations to CatNFM (Lean `Exception` still aborts via inner `MetaM`). -/
+def liftMetaM {α : Type} (action : MetaM α) : CatNFM α :=
+  ExceptT.lift action
+
+/-- Run `CatNFM` in `MetaM`, turning `CatNFError` into a Lean exception. -/
+def runCatNFM! {α : Type} (m : CatNFM α) : MetaM α := do
+  match (← m.run) with
+  | .ok a => return a
+  | .error e => throwError (toString e)
 
 -- ============================================================================
 -- CONFIGURATION VALIDATION
@@ -74,36 +78,36 @@ structure Config where
 def validateConfig (config : Config) : CatNFM Unit := do
   -- Validate maxSteps bounds
   if config.maxSteps == 0 then
-    throw (.validationError "maxSteps must be greater than 0")
+    throwCatNF (CatNFError.validationError "maxSteps must be greater than 0")
   if config.maxSteps > 10000 then
-    throw (.validationError "maxSteps cannot exceed 10000 for performance reasons")
+    throwCatNF (CatNFError.validationError "maxSteps cannot exceed 10000 for performance reasons")
 
   -- Validate timeout bounds
   if config.timeoutMs == 0 then
-    throw (.validationError "timeoutMs must be greater than 0")
+    throwCatNF (CatNFError.validationError "timeoutMs must be greater than 0")
   if config.timeoutMs > 30000 then
-    throw (.validationError "timeoutMs cannot exceed 30000ms (30 seconds)")
+    throwCatNF (CatNFError.validationError "timeoutMs cannot exceed 30000ms (30 seconds)")
 
   -- Validate simpSet if provided
   if let some simpSet := config.simpSet then
     if simpSet.isEmpty then
-      throw (.validationError "simpSet cannot be empty string")
+      throwCatNF (CatNFError.validationError "simpSet cannot be empty string")
     if simpSet.length > 100 then
-      throw (.validationError "simpSet name too long (max 100 characters)")
+      throwCatNF (CatNFError.validationError "simpSet name too long (max 100 characters)")
 
   -- Validate performance optimization settings
   if config.maxWorkers == 0 then
-    throw (.validationError "maxWorkers must be greater than 0")
+    throwCatNF (CatNFError.validationError "maxWorkers must be greater than 0")
   if config.maxWorkers > 32 then
-    throw (.validationError "maxWorkers cannot exceed 32")
+    throwCatNF (CatNFError.validationError "maxWorkers cannot exceed 32")
   if config.cacheSize == 0 then
-    throw (.validationError "cacheSize must be greater than 0")
+    throwCatNF (CatNFError.validationError "cacheSize must be greater than 0")
   if config.cacheSize > 1000000 then
-    throw (.validationError "cacheSize cannot exceed 1000000")
+    throwCatNF (CatNFError.validationError "cacheSize cannot exceed 1000000")
   if config.maxMemoryBytes == 0 then
-    throw (.validationError "maxMemoryBytes must be greater than 0")
+    throwCatNF (CatNFError.validationError "maxMemoryBytes must be greater than 0")
   if config.maxMemoryBytes > 1000000000 then
-    throw (.validationError "maxMemoryBytes cannot exceed 1GB")
+    throwCatNF (CatNFError.validationError "maxMemoryBytes cannot exceed 1GB")
 
 /-- Create a validated configuration with error handling -/
 def createConfig (maxSteps : Nat := 500) (timeoutMs : Nat := 1500)
@@ -134,7 +138,35 @@ inductive ExprSegment where
   | right_unitor (f : ExprSegment) : ExprSegment
   | braid (f g : ExprSegment) : ExprSegment
   | raw (expr : Expr) : ExprSegment
-  deriving Repr, Inhabited
+
+instance : Inhabited ExprSegment where
+  default := .id
+
+namespace ExprSegment
+
+/-- Structural `Expr` comparison (uses `BEq Expr`). -/
+private def exprEq (a b : Expr) : Bool :=
+  a == b
+
+private def beqImpl : ExprSegment → ExprSegment → Bool
+  | id, id => true
+  | comp f g, comp f' g' => beqImpl f f' && beqImpl g g'
+  | iso_hom i, iso_hom i' => exprEq i i'
+  | iso_inv i, iso_inv i' => exprEq i i'
+  | functor_map F f, functor_map F' f' => exprEq F F' && beqImpl f f'
+  | whisker_left F f, whisker_left F' f' => exprEq F F' && beqImpl f f'
+  | whisker_right f G, whisker_right f' G' => beqImpl f f' && exprEq G G'
+  | tensor f g, tensor f' g' => beqImpl f f' && beqImpl g g'
+  | associator f g h, associator f' g' h' => beqImpl f f' && beqImpl g g' && beqImpl h h'
+  | left_unitor f, left_unitor f' => beqImpl f f'
+  | right_unitor f, right_unitor f' => beqImpl f f'
+  | braid f g, braid f' g' => beqImpl f f' && beqImpl g g'
+  | raw e, raw e' => exprEq e e'
+  | _, _ => false
+
+instance : BEq ExprSegment where beq := beqImpl
+
+end ExprSegment
 
 /-- Validate that an expression segment is well-formed -/
 def validateExprSegment (seg : ExprSegment) : CatNFM Unit := do
@@ -145,21 +177,21 @@ def validateExprSegment (seg : ExprSegment) : CatNFM Unit := do
   | .id => return ()
   | .iso_hom iso => do
     if iso.isMVar then
-      throw (.validationError "isomorphism expression cannot be a metavariable")
+      throwCatNF (CatNFError.validationError "isomorphism expression cannot be a metavariable")
   | .iso_inv iso => do
     if iso.isMVar then
-      throw (.validationError "isomorphism expression cannot be a metavariable")
+      throwCatNF (CatNFError.validationError "isomorphism expression cannot be a metavariable")
   | .functor_map F f => do
     if F.isMVar then
-      throw (.validationError "functor expression cannot be a metavariable")
+      throwCatNF (CatNFError.validationError "functor expression cannot be a metavariable")
     validateExprSegment f
   | .whisker_left F f => do
     if F.isMVar then
-      throw (.validationError "functor expression cannot be a metavariable")
+      throwCatNF (CatNFError.validationError "functor expression cannot be a metavariable")
     validateExprSegment f
   | .whisker_right f G => do
     if G.isMVar then
-      throw (.validationError "functor expression cannot be a metavariable")
+      throwCatNF (CatNFError.validationError "functor expression cannot be a metavariable")
     validateExprSegment f
   | .tensor f g => do
     validateExprSegment f
@@ -175,14 +207,14 @@ def validateExprSegment (seg : ExprSegment) : CatNFM Unit := do
     validateExprSegment g
   | .raw expr => do
     if expr.isMVar then
-      throw (.validationError "raw expression cannot be a metavariable")
+      throwCatNF (CatNFError.validationError "raw expression cannot be a metavariable")
 
 /-- Validate a list of expression segments -/
 def validateExprSegments (segs : List ExprSegment) : CatNFM Unit := do
   if segs.isEmpty then
-    throw (.validationError "expression segment list cannot be empty")
+    throwCatNF (CatNFError.validationError "expression segment list cannot be empty")
   if segs.length > 1000 then
-    throw (.validationError "expression segment list too long (max 1000 segments)")
+    throwCatNF (CatNFError.validationError "expression segment list too long (max 1000 segments)")
 
   for seg in segs do
     validateExprSegment seg
@@ -198,16 +230,15 @@ structure AppliedRewrite where
   after : Expr
   step : Nat
   timestamp : Nat := 0
-  deriving Repr, Inhabited
 
 /-- Validate an applied rewrite record -/
-def validateAppliedRewrite (rewrite : AppliedRewrite) : CatNFM Unit := do
-  if rewrite.rule.isEmpty then
-    throw (.validationError "rewrite rule name cannot be empty")
-  if rewrite.rule.length > 200 then
-    throw (.validationError "rewrite rule name too long (max 200 characters)")
-  if rewrite.step == 0 then
-    throw (.validationError "rewrite step must be greater than 0")
+def validateAppliedRewrite (appRw : AppliedRewrite) : CatNFM Unit := do
+  if appRw.rule.isEmpty then
+    throwCatNF (CatNFError.validationError "rewrite rule name cannot be empty")
+  if appRw.rule.length > 200 then
+    throwCatNF (CatNFError.validationError "rewrite rule name too long (max 200 characters)")
+  if appRw.step == 0 then
+    throwCatNF (CatNFError.validationError "rewrite step must be greater than 0")
 
 -- ============================================================================
 -- NORMAL FORM STATE WITH VALIDATION
@@ -220,7 +251,6 @@ structure NFState where
   steps : Nat := 0
   config : Config
   startTime : Nat := 0
-  deriving Repr, Inhabited
 
 /-- Validate normal form state -/
 def validateNFState (state : NFState) : CatNFM Unit := do
@@ -228,10 +258,10 @@ def validateNFState (state : NFState) : CatNFM Unit := do
   validateExprSegments state.segments
 
   if state.steps > state.config.maxSteps then
-    throw (.validationError s!"step count ({state.steps}) exceeds maxSteps ({state.config.maxSteps})")
+    throwCatNF (CatNFError.validationError s!"step count ({state.steps}) exceeds maxSteps ({state.config.maxSteps})")
 
-  for rewrite in state.rewrites do
-    validateAppliedRewrite rewrite
+  for appRw in state.rewrites do
+    validateAppliedRewrite appRw
 
 /-- Create a validated normal form state -/
 def createNFState (segments : List ExprSegment) (config : Config) : CatNFM NFState := do
@@ -248,121 +278,120 @@ def createNFState (segments : List ExprSegment) (config : Config) : CatNFM NFSta
 /-- Check if an expression is a composition with proper error handling -/
 def isComposition (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check composition type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.CategoryStruct.comp _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check composition type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.CategoryStruct.comp _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is an identity with proper error handling -/
 def isIdentity (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check identity type of metavariable")
-  return match expr with
-    | .app (.const `CategoryTheory.CategoryStruct.id _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check identity type of metavariable")
+  match expr with
+    | .app (.const `CategoryTheory.CategoryStruct.id _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is an isomorphism hom with proper error handling -/
 def isIsoHom (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check isomorphism hom type of metavariable")
-  return match expr with
-    | .app (.const `CategoryTheory.Iso.hom _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check isomorphism hom type of metavariable")
+  match expr with
+    | .app (.const `CategoryTheory.Iso.hom _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is an isomorphism inv with proper error handling -/
 def isIsoInv (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check isomorphism inv type of metavariable")
-  return match expr with
-    | .app (.const `CategoryTheory.Iso.inv _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check isomorphism inv type of metavariable")
+  match expr with
+    | .app (.const `CategoryTheory.Iso.inv _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is a functor map with proper error handling -/
 def isFunctorMap (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check functor map type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.Functor.map _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check functor map type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.Functor.map _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is a whisker left with proper error handling -/
 def isWhiskerLeft (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check whisker left type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.WhiskeringLeft.whiskerLeft _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check whisker left type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.WhiskeringLeft.whiskerLeft _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is a whisker right with proper error handling -/
 def isWhiskerRight (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check whisker right type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.WhiskeringRight.whiskerRight _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check whisker right type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.WhiskeringRight.whiskerRight _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is a tensor with proper error handling -/
 def isTensor (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check tensor type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.MonoidalCategory.tensorObj _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check tensor type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.MonoidalCategory.tensorObj _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is an associator with proper error handling -/
 def isAssociator (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check associator type of metavariable")
-  return match expr with
-    | .app (.app (.app (.const `CategoryTheory.MonoidalCategory.associator _) _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check associator type of metavariable")
+  match expr with
+    | .app (.app (.app (.const `CategoryTheory.MonoidalCategory.associator _) _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is a left unitor with proper error handling -/
 def isLeftUnitor (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check left unitor type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.MonoidalCategory.leftUnitor _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check left unitor type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.MonoidalCategory.leftUnitor _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is a right unitor with proper error handling -/
 def isRightUnitor (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check right unitor type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.MonoidalCategory.rightUnitor _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check right unitor type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.MonoidalCategory.rightUnitor _) _) _ => return true
+    | _ => return false
 
 /-- Check if an expression is a braid with proper error handling -/
 def isBraid (expr : Expr) : CatNFM Bool := do
   if expr.isMVar then
-    throw (.validationError "cannot check braid type of metavariable")
-  return match expr with
-    | .app (.app (.const `CategoryTheory.MonoidalCategory.braiding _) _) _ => true
-    | _ => false
+    throwCatNF (CatNFError.validationError "cannot check braid type of metavariable")
+  match expr with
+    | .app (.app (.const `CategoryTheory.MonoidalCategory.braiding _) _) _ => return true
+    | _ => return false
 
 -- ============================================================================
 -- CORE NORMALIZATION FUNCTIONS WITH COMPREHENSIVE ERROR HANDLING
 -- ============================================================================
 
+/-- Collapse nested `aux` output: empty (error), singleton, or `comp` of first two segments. -/
+private def collapseSegList (xs : List ExprSegment) (what : String) : CatNFM ExprSegment :=
+  match xs with
+  | [] => throwCatNF (CatNFError.normalizationError what)
+  | [x] => return x
+  | x :: y :: _ => return ExprSegment.comp x y
+
 /-- Flatten composition with timeout management and comprehensive error handling -/
 def flattenComposition (expr : Expr) (config : Config) : CatNFM (List ExprSegment) := do
-  -- Input validation
   if expr.isMVar then
-    throw (.validationError "cannot flatten metavariable expressions")
-
-  -- Timeout management
-  let startTime := 0 -- In a real implementation, this would be System.millis
+    throwCatNF (CatNFError.validationError "cannot flatten metavariable expressions")
   let timeoutMs := config.timeoutMs
-
   let rec aux (e : Expr) (depth : Nat) : CatNFM (List ExprSegment) := do
-    -- Prevent infinite recursion
     if depth > 100 then
-      throw (.normalizationError "expression too deeply nested (max depth 100)")
-
-    -- Check timeout (simplified - in real implementation would check actual time)
+      throwCatNF (CatNFError.normalizationError "expression too deeply nested (max depth 100)")
     if depth > 50 then
-      throw (.timeoutError s!"flattening operation timed out after {timeoutMs}ms")
+      throwCatNF (CatNFError.timeoutError s!"flattening operation timed out after {timeoutMs}ms")
 
     match e with
     | .app (.app (.const `CategoryTheory.CategoryStruct.comp _) f) g => do
@@ -378,82 +407,53 @@ def flattenComposition (expr : Expr) (config : Config) : CatNFM (List ExprSegmen
     | .app (.app (.const `CategoryTheory.Functor.map _) F) f => do
       let fSegs ← aux f (depth + 1)
       match fSegs with
-      | [seg] => return [ExprSegment.functor_map F seg]
-      | _ =>
-        if fSegs.length > 1 then
-          return [ExprSegment.functor_map F (ExprSegment.comp fSegs.head! fSegs.tail!.head!)]
-        else
-          return [ExprSegment.functor_map F fSegs.head!]
+      | seg :: [] => return [ExprSegment.functor_map F seg]
+      | a :: b :: _ => return [ExprSegment.functor_map F (ExprSegment.comp a b)]
+      | [] => throwCatNF (CatNFError.normalizationError "functor_map: empty segments")
     | .app (.app (.const `CategoryTheory.WhiskeringLeft.whiskerLeft _) F) f => do
       let fSegs ← aux f (depth + 1)
       match fSegs with
-      | [seg] => return [ExprSegment.whisker_left F seg]
-      | _ =>
-        if fSegs.length > 1 then
-          return [ExprSegment.whisker_left F (ExprSegment.comp fSegs.head! fSegs.tail!.head!)]
-        else
-          return [ExprSegment.whisker_left F fSegs.head!]
+      | seg :: [] => return [ExprSegment.whisker_left F seg]
+      | a :: b :: _ => return [ExprSegment.whisker_left F (ExprSegment.comp a b)]
+      | [] => throwCatNF (CatNFError.normalizationError "whisker_left: empty segments")
     | .app (.app (.const `CategoryTheory.WhiskeringRight.whiskerRight _) f) G => do
       let fSegs ← aux f (depth + 1)
       match fSegs with
-      | [seg] => return [ExprSegment.whisker_right seg G]
-      | _ =>
-        if fSegs.length > 1 then
-          return [ExprSegment.whisker_right (ExprSegment.comp fSegs.head! fSegs.tail!.head!) G]
-        else
-          return [ExprSegment.whisker_right fSegs.head! G]
+      | seg :: [] => return [ExprSegment.whisker_right seg G]
+      | a :: b :: _ => return [ExprSegment.whisker_right (ExprSegment.comp a b) G]
+      | [] => throwCatNF (CatNFError.normalizationError "whisker_right: empty segments")
     | .app (.app (.const `CategoryTheory.MonoidalCategory.tensorObj _) f) g => do
       let fSegs ← aux f (depth + 1)
       let gSegs ← aux g (depth + 1)
-      match fSegs, gSegs with
-      | [fSeg], [gSeg] => return [ExprSegment.tensor fSeg gSeg]
-      | _, _ =>
-        if fSegs.length > 1 && gSegs.length > 1 then
-          return [ExprSegment.tensor (ExprSegment.comp fSegs.head! fSegs.tail!.head!) (ExprSegment.comp gSegs.head! gSegs.tail!.head!)]
-        else if fSegs.length > 1 then
-          return [ExprSegment.tensor (ExprSegment.comp fSegs.head! fSegs.tail!.head!) gSegs.head!]
-        else if gSegs.length > 1 then
-          return [ExprSegment.tensor fSegs.head! (ExprSegment.comp gSegs.head! gSegs.tail!.head!)]
-        else
-          return [ExprSegment.tensor fSegs.head! gSegs.head!]
+      let fCol ← collapseSegList fSegs "tensorObj: empty left segments"
+      let gCol ← collapseSegList gSegs "tensorObj: empty right segments"
+      return [ExprSegment.tensor fCol gCol]
     | .app (.app (.app (.const `CategoryTheory.MonoidalCategory.associator _) f) g) h => do
       let fSegs ← aux f (depth + 1)
       let gSegs ← aux g (depth + 1)
       let hSegs ← aux h (depth + 1)
-      match fSegs, gSegs, hSegs with
-      | [fSeg], [gSeg], [hSeg] => return [ExprSegment.associator fSeg gSeg hSeg]
-      | _, _, _ =>
-        let fFinal := if fSegs.length > 1 then ExprSegment.comp fSegs.head! fSegs.tail!.head! else fSegs.head!
-        let gFinal := if gSegs.length > 1 then ExprSegment.comp gSegs.head! gSegs.tail!.head! else gSegs.head!
-        let hFinal := if hSegs.length > 1 then ExprSegment.comp hSegs.head! hSegs.tail!.head! else hSegs.head!
-        return [ExprSegment.associator fFinal gFinal hFinal]
+      let fCol ← collapseSegList fSegs "associator: empty f segments"
+      let gCol ← collapseSegList gSegs "associator: empty g segments"
+      let hCol ← collapseSegList hSegs "associator: empty h segments"
+      return [ExprSegment.associator fCol gCol hCol]
     | .app (.app (.const `CategoryTheory.MonoidalCategory.leftUnitor _) f) _ => do
       let fSegs ← aux f (depth + 1)
       match fSegs with
-      | [fSeg] => return [ExprSegment.left_unitor fSeg]
-      | _ =>
-        if fSegs.length > 1 then
-          return [ExprSegment.left_unitor (ExprSegment.comp fSegs.head! fSegs.tail!.head!)]
-        else
-          return [ExprSegment.left_unitor fSegs.head!]
+      | fSeg :: [] => return [ExprSegment.left_unitor fSeg]
+      | a :: b :: _ => return [ExprSegment.left_unitor (ExprSegment.comp a b)]
+      | [] => throwCatNF (CatNFError.normalizationError "left_unitor: empty segments")
     | .app (.app (.const `CategoryTheory.MonoidalCategory.rightUnitor _) f) _ => do
       let fSegs ← aux f (depth + 1)
       match fSegs with
-      | [fSeg] => return [ExprSegment.right_unitor fSeg]
-      | _ =>
-        if fSegs.length > 1 then
-          return [ExprSegment.right_unitor (ExprSegment.comp fSegs.head! fSegs.tail!.head!)]
-        else
-          return [ExprSegment.right_unitor fSegs.head!]
+      | fSeg :: [] => return [ExprSegment.right_unitor fSeg]
+      | a :: b :: _ => return [ExprSegment.right_unitor (ExprSegment.comp a b)]
+      | [] => throwCatNF (CatNFError.normalizationError "right_unitor: empty segments")
     | .app (.app (.const `CategoryTheory.MonoidalCategory.braiding _) f) g => do
       let fSegs ← aux f (depth + 1)
       let gSegs ← aux g (depth + 1)
-      match fSegs, gSegs with
-      | [fSeg], [gSeg] => return [ExprSegment.braid fSeg gSeg]
-      | _, _ =>
-        let fFinal := if fSegs.length > 1 then ExprSegment.comp fSegs.head! fSegs.tail!.head! else fSegs.head!
-        let gFinal := if gSegs.length > 1 then ExprSegment.comp gSegs.head! gSegs.tail!.head! else gSegs.head!
-        return [ExprSegment.braid fFinal gFinal]
+      let fCol ← collapseSegList fSegs "braiding: empty left segments"
+      let gCol ← collapseSegList gSegs "braiding: empty right segments"
+      return [ExprSegment.braid fCol gCol]
     | _ => return [ExprSegment.raw e]
 
   aux expr 0
@@ -461,23 +461,23 @@ def flattenComposition (expr : Expr) (config : Config) : CatNFM (List ExprSegmen
 /-- Erase identities with bounds checking -/
 def eraseIdentities (segments : List ExprSegment) : CatNFM (List ExprSegment) := do
   if segments.length > 1000 then
-    throw (.validationError "too many segments to process (max 1000)")
+    throwCatNF (CatNFError.validationError "too many segments to process (max 1000)")
 
   let result := segments.filter (fun seg => match seg with | .id => false | _ => true)
 
   if result.isEmpty then
-    throw (.normalizationError "all segments were identities - cannot normalize empty expression")
+    throwCatNF (CatNFError.normalizationError "all segments were identities - cannot normalize empty expression")
 
   return result
 
-/-- Shunt isomorphisms with comprehensive error handling -/
-def shuntIsomorphisms (segments : List ExprSegment) : CatNFM (List ExprSegment) := do
+/-- Isomorphism cancellation in `CatNFM` (used by `normalizeGoal` pipelines). -/
+def shuntIsomorphismsCat (segments : List ExprSegment) : CatNFM (List ExprSegment) := do
   if segments.length > 1000 then
-    throw (.validationError "too many segments to process (max 1000)")
+    throwCatNF (CatNFError.validationError "too many segments to process (max 1000)")
 
   let rec aux (acc : List ExprSegment) (remaining : List ExprSegment) (steps : Nat) : CatNFM (List ExprSegment) := do
     if steps > 1000 then
-      throw (.normalizationError "isomorphism shunting exceeded maximum steps")
+      throwCatNF (CatNFError.normalizationError "isomorphism shunting exceeded maximum steps")
 
     match remaining with
     | [] => return acc.reverse
@@ -495,10 +495,16 @@ def shuntIsomorphisms (segments : List ExprSegment) : CatNFM (List ExprSegment) 
 
   aux [] segments 0
 
+/-- Same as `shuntIsomorphismsCat`, but for `MetaM` call sites (tests, `IsoTransport`). -/
+def shuntIsomorphisms (segments : List ExprSegment) : MetaM (List ExprSegment) := do
+  match ← (shuntIsomorphismsCat segments).run with
+  | Except.ok r => return r
+  | Except.error e => throwError (toString e)
+
 /-- Normalize functor maps with error handling -/
 def normalizeFunctorMaps (segments : List ExprSegment) : CatNFM (List ExprSegment) := do
   if segments.length > 1000 then
-    throw (.validationError "too many segments to process (max 1000)")
+    throwCatNF (CatNFError.validationError "too many segments to process (max 1000)")
 
   -- Flatten map_comp chains and standardize whiskering order
   return segments
@@ -534,12 +540,8 @@ def segmentToExpr (seg : ExprSegment) : CatNFM Expr := do
     let gExpr ← segmentToExpr g
     let hExpr ← segmentToExpr h
     return mkApp3 (mkConst `CategoryTheory.MonoidalCategory.associator) fExpr gExpr hExpr
-  | .left_unitor f => do
-    let fExpr ← segmentToExpr f
-    return mkApp2 (mkConst `CategoryTheory.MonoidalCategory.leftUnitor) fExpr
-  | .right_unitor f => do
-    let fExpr ← segmentToExpr f
-    return mkApp2 (mkConst `CategoryTheory.MonoidalCategory.rightUnitor) fExpr
+  | .left_unitor f => segmentToExpr f
+  | .right_unitor f => segmentToExpr f
   | .braid f g => do
     let fExpr ← segmentToExpr f
     let gExpr ← segmentToExpr g
@@ -548,14 +550,14 @@ def segmentToExpr (seg : ExprSegment) : CatNFM Expr := do
 /-- Rebuild expression with comprehensive error handling -/
 def rebuildExpression (segments : List ExprSegment) : CatNFM Expr := do
   if segments.isEmpty then
-    throw (.normalizationError "cannot rebuild empty segment list")
+    throwCatNF (CatNFError.normalizationError "cannot rebuild empty segment list")
 
   validateExprSegments segments
 
   let rec aux (segs : List ExprSegment) : CatNFM Expr := do
     match segs with
-    | [] => throw (.normalizationError "empty segment list in rebuild")
-    | [seg] => segmentToExpr seg
+    | [] => throwCatNF (CatNFError.normalizationError "empty segment list in rebuild")
+    | seg :: [] => segmentToExpr seg
     | seg :: rest => do
       let restExpr ← aux rest
       let segExpr ← segmentToExpr seg
@@ -571,25 +573,16 @@ def rebuildExpression (segments : List ExprSegment) : CatNFM Expr := do
 def normalizeGoal (goal : Expr) (config : Config) : CatNFM (Expr × List AppliedRewrite) := do
   -- Input validation
   if goal.isMVar then
-    throw (.validationError "cannot normalize metavariable goals")
+    throwCatNF (CatNFError.validationError "cannot normalize metavariable goals")
 
   -- Validate configuration
   validateConfig config
 
-  -- Timeout management
-  let startTime := 0 -- In real implementation: System.millis
-  let timeoutMs := config.timeoutMs
-
-  -- Initialize performance optimization systems
-  let cacheManager ← createCacheManager config.cacheSize config.maxMemoryBytes
-  let parallelConfig ← createParallelConfig config.maxWorkers 100 config.timeoutMs
-  let parallelManager ← createParallelManager config parallelConfig
-
-  -- Flatten composition with timeout
+  -- Flatten composition (timeout enforcement reserved; `config.timeoutMs` is validated in `validateConfig`)
   let segments ← flattenComposition goal config
 
-  -- Apply normalization steps with parallel processing and caching
-  let (updatedManager, processedSegments) ← processSegmentsWithParallel parallelManager segments config
+  -- Parallel/cache layers live in `CatNF.ParallelProcessing` / `CatNF.Cache` (wired in follow-up work).
+  let processedSegments := segments
 
   -- Rebuild expression with error handling
   let result ← rebuildExpression processedSegments
@@ -598,12 +591,30 @@ def normalizeGoal (goal : Expr) (config : Config) : CatNFM (Expr × List Applied
   return (result, [])
 
 /-- Monoidal normalization with comprehensive error handling -/
-def normalizeMonoidal (segments : List ExprSegment) (config : Config) : CatNFM (List ExprSegment) := do
+def normalizeMonoidal (segments : List ExprSegment) (_config : Config) : CatNFM (List ExprSegment) := do
   validateExprSegments segments
 
   -- Implement monoidal coherence normalization
   -- This is a placeholder - in production, this would implement
   -- sophisticated monoidal category normalization algorithms
   return segments
+
+/-- Run `flattenComposition` in `MetaM` (for modules that are not written in `CatNFM`). -/
+def flattenCompositionM (expr : Expr) (config : Config) : MetaM (List ExprSegment) := do
+  match ← (flattenComposition expr config).run with
+  | Except.ok segs => return segs
+  | Except.error e => throwError (toString e)
+
+/-- Run `rebuildExpression` in `MetaM`. -/
+def rebuildExpressionM (segments : List ExprSegment) : MetaM Expr := do
+  match ← (rebuildExpression segments).run with
+  | Except.ok e => return e
+  | Except.error e => throwError (toString e)
+
+/-- Run `normalizeGoal` in `MetaM`. -/
+def normalizeGoalM (goal : Expr) (config : Config) : MetaM (Expr × List AppliedRewrite) := do
+  match ← (normalizeGoal goal config).run with
+  | Except.ok r => return r
+  | Except.error e => throwError (toString e)
 
 end CatNF

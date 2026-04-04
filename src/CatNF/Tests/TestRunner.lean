@@ -2,17 +2,17 @@ import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided
-import Mathlib.CategoryTheory.Monoidal.Symmetric
+import Mathlib.CategoryTheory.Monoidal.Braided.Basic
 import Mathlib.CategoryTheory.Whiskering
 import Mathlib.Data.List.Basic
 import Mathlib.Data.Array.Basic
-import Mathlib.Data.Nat.Basic
 import Mathlib.Data.Real.Basic
-import Mathlib.Data.Float.Basic
 import Lean.Expr
 import Lean.Meta
 import Lean.Elab.Command
+import Lean.Environment
+import Lean.Util.Path
+import Lean.CoreM
 import Mathlib.Tactic.Basic
 import Mathlib.Tactic.SimpRw
 import CatNF.Core
@@ -38,6 +38,8 @@ import CatNF.Tests.Determinism.DeterminismTests
 import CatNF.Tests.Determinism.NonDeterminismDetection
 
 namespace CatNF.Tests.TestRunner
+
+open Lean Meta Core
 
 -- Test execution result
 structure TestExecutionResult where
@@ -89,14 +91,14 @@ structure TestConfig where
   maxRetries : Nat := 3
 
 -- Performance measurement utilities
-def measureExecutionTime (action : MetaM α) : MetaM (α × Nat) := do
+def measureExecutionTime (α : Type) (action : Lean.Meta.MetaM α) : Lean.Meta.MetaM (α × Nat) := do
   let startTime ← IO.monoMsNow
   let result ← action
   let endTime ← IO.monoMsNow
   let executionTime := endTime - startTime
   return (result, executionTime)
 
-def measureMemoryUsage (action : MetaM α) : MetaM (α × Nat) := do
+def measureMemoryUsage (α : Type) (action : Lean.Meta.MetaM α) : Lean.Meta.MetaM (α × Nat) := do
   let startMemory ← IO.getNumHeartbeats
   let result ← action
   let endMemory ← IO.getNumHeartbeats
@@ -104,7 +106,7 @@ def measureMemoryUsage (action : MetaM α) : MetaM (α × Nat) := do
   return (result, memoryUsage)
 
 -- Unit test runner
-def runUnitTests (config : TestConfig) : MetaM TestSuiteResult := do
+def runUnitTests (config : TestConfig) : Lean.Meta.MetaM TestSuiteResult := do
   if !config.enableUnitTests then
     return {
       suiteName := "Unit Tests"
@@ -125,19 +127,19 @@ def runUnitTests (config : TestConfig) : MetaM TestSuiteResult := do
   let mut failedCount := 0
 
   -- Run Core unit tests
-  let (coreResult, coreTime) ← measureExecutionTime (do
+  let (coreResult, coreTime) ← measureExecutionTime Bool (do
     try
       CatNF.Tests.Unit.runAllTests
       return true
-    catch e =>
-      IO.println s!"Core tests failed: {e}"
+    catch _ =>
+      IO.println "Core tests failed"
       return false
   )
-  let (_, coreMemory) ← measureMemoryUsage (do
+  let (_, coreMemory) ← measureMemoryUsage Unit (do
     try
       CatNF.Tests.Unit.runAllTests
       return ()
-    catch e =>
+    catch _ =>
       return ()
   )
 
@@ -159,19 +161,19 @@ def runUnitTests (config : TestConfig) : MetaM TestSuiteResult := do
     failedCount := failedCount + 1
 
   -- Run Attr unit tests
-  let (attrResult, attrTime) ← measureExecutionTime (do
+  let (attrResult, attrTime) ← measureExecutionTime Bool (do
     try
       CatNF.Tests.Unit.Attr.runAllTests
       return true
-    catch e =>
-      IO.println s!"Attr tests failed: {e}"
+    catch _ =>
+      IO.println "Attr tests failed"
       return false
   )
-  let (_, attrMemory) ← measureMemoryUsage (do
+  let (_, attrMemory) ← measureMemoryUsage Unit (do
     try
       CatNF.Tests.Unit.Attr.runAllTests
       return ()
-    catch e =>
+    catch _ =>
       return ()
   )
 
@@ -193,19 +195,19 @@ def runUnitTests (config : TestConfig) : MetaM TestSuiteResult := do
     failedCount := failedCount + 1
 
   -- Run Monoidal unit tests
-  let (monoidalResult, monoidalTime) ← measureExecutionTime (do
+  let (monoidalResult, monoidalTime) ← measureExecutionTime Bool (do
     try
       CatNF.Tests.Unit.Monoidal.runAllTests
       return true
-    catch e =>
-      IO.println s!"Monoidal tests failed: {e}"
+    catch _ =>
+      IO.println "Monoidal tests failed"
       return false
   )
-  let (_, monoidalMemory) ← measureMemoryUsage (do
+  let (_, monoidalMemory) ← measureMemoryUsage Unit (do
     try
       CatNF.Tests.Unit.Monoidal.runAllTests
       return ()
-    catch e =>
+    catch _ =>
       return ()
   )
 
@@ -227,19 +229,19 @@ def runUnitTests (config : TestConfig) : MetaM TestSuiteResult := do
     failedCount := failedCount + 1
 
   -- Run RewriteRules unit tests
-  let (rewriteResult, rewriteTime) ← measureExecutionTime (do
+  let (rewriteResult, rewriteTime) ← measureExecutionTime Bool (do
     try
       CatNF.Tests.Unit.RewriteRules.runAllTests
       return true
-    catch e =>
-      IO.println s!"RewriteRules tests failed: {e}"
+    catch _ =>
+      IO.println "RewriteRules tests failed"
       return false
   )
-  let (_, rewriteMemory) ← measureMemoryUsage (do
+  let (_, rewriteMemory) ← measureMemoryUsage Unit (do
     try
       CatNF.Tests.Unit.RewriteRules.runAllTests
       return ()
-    catch e =>
+    catch _ =>
       return ()
   )
 
@@ -261,19 +263,19 @@ def runUnitTests (config : TestConfig) : MetaM TestSuiteResult := do
     failedCount := failedCount + 1
 
   -- Run Tactic unit tests
-  let (tacticResult, tacticTime) ← measureExecutionTime (do
+  let (tacticResult, tacticTime) ← measureExecutionTime Bool (do
     try
       CatNF.Tests.Unit.Tactic.runAllTests
       return true
-    catch e =>
-      IO.println s!"Tactic tests failed: {e}"
+    catch _ =>
+      IO.println "Tactic tests failed"
       return false
   )
-  let (_, tacticMemory) ← measureMemoryUsage (do
+  let (_, tacticMemory) ← measureMemoryUsage Unit (do
     try
       CatNF.Tests.Unit.Tactic.runAllTests
       return ()
-    catch e =>
+    catch _ =>
       return ()
   )
 
@@ -307,7 +309,7 @@ def runUnitTests (config : TestConfig) : MetaM TestSuiteResult := do
   }
 
 -- Integration test runner
-def runIntegrationTests (config : TestConfig) : MetaM TestSuiteResult := do
+def runIntegrationTests (config : TestConfig) : Lean.Meta.MetaM TestSuiteResult := do
   if !config.enableIntegrationTests then
     return {
       suiteName := "Integration Tests"
@@ -328,19 +330,19 @@ def runIntegrationTests (config : TestConfig) : MetaM TestSuiteResult := do
   let mut failedCount := 0
 
   -- Run Workflows integration tests
-  let (workflowsResult, workflowsTime) ← measureExecutionTime (do
+  let (workflowsResult, workflowsTime) ← measureExecutionTime Bool (do
     try
       CatNF.Tests.Integration.Workflows.runAllTests
       return true
-    catch e =>
-      IO.println s!"Workflows tests failed: {e}"
+    catch _ =>
+      IO.println "Workflows tests failed"
       return false
   )
-  let (_, workflowsMemory) ← measureMemoryUsage (do
+  let (_, workflowsMemory) ← measureMemoryUsage Unit (do
     try
       CatNF.Tests.Integration.Workflows.runAllTests
       return ()
-    catch e =>
+    catch _ =>
       return ()
   )
 
@@ -362,19 +364,19 @@ def runIntegrationTests (config : TestConfig) : MetaM TestSuiteResult := do
     failedCount := failedCount + 1
 
   -- Run EndToEnd integration tests
-  let (endToEndResult, endToEndTime) ← measureExecutionTime (do
+  let (endToEndResult, endToEndTime) ← measureExecutionTime Bool (do
     try
       CatNF.Tests.Integration.EndToEnd.runAllTests
       return true
-    catch e =>
-      IO.println s!"EndToEnd tests failed: {e}"
+    catch _ =>
+      IO.println "EndToEnd tests failed"
       return false
   )
-  let (_, endToEndMemory) ← measureMemoryUsage (do
+  let (_, endToEndMemory) ← measureMemoryUsage Unit (do
     try
       CatNF.Tests.Integration.EndToEnd.runAllTests
       return ()
-    catch e =>
+    catch _ =>
       return ()
   )
 
@@ -408,7 +410,7 @@ def runIntegrationTests (config : TestConfig) : MetaM TestSuiteResult := do
   }
 
 -- Performance test runner
-def runPerformanceTests (config : TestConfig) : MetaM TestSuiteResult := do
+def runPerformanceTests (config : TestConfig) : Lean.Meta.MetaM TestSuiteResult := do
   if !config.enablePerformanceTests then
     return {
       suiteName := "Performance Tests"
@@ -429,8 +431,8 @@ def runPerformanceTests (config : TestConfig) : MetaM TestSuiteResult := do
   let mut failedCount := 0
 
   -- Run Benchmarks performance tests
-  let (benchmarksResult, benchmarksTime) ← measureExecutionTime (CatNF.Tests.Performance.runPerformanceTests)
-  let (_, benchmarksMemory) ← measureMemoryUsage (CatNF.Tests.Performance.runPerformanceTests)
+  let (_, benchmarksTime) ← measureExecutionTime Unit CatNF.Tests.Performance.runPerformanceTests
+  let (_, benchmarksMemory) ← measureMemoryUsage Unit CatNF.Tests.Performance.runPerformanceTests
 
   results := results ++ [{
     testSuite := "Performance Tests"
@@ -448,8 +450,8 @@ def runPerformanceTests (config : TestConfig) : MetaM TestSuiteResult := do
 
   -- Run RegressionDetection performance tests
   if config.enableRegressionDetection then
-    let (regressionResult, regressionTime) ← measureExecutionTime (CatNF.Tests.Performance.RegressionDetection.runAllRegressionTests)
-    let (_, regressionMemory) ← measureMemoryUsage (CatNF.Tests.Performance.RegressionDetection.runAllRegressionTests)
+    let (_, regressionTime) ← measureExecutionTime Unit CatNF.Tests.Performance.RegressionDetection.runAllRegressionTests
+    let (_, regressionMemory) ← measureMemoryUsage Unit CatNF.Tests.Performance.RegressionDetection.runAllRegressionTests
 
     results := results ++ [{
       testSuite := "Performance Tests"
@@ -478,7 +480,7 @@ def runPerformanceTests (config : TestConfig) : MetaM TestSuiteResult := do
   }
 
 -- Determinism test runner
-def runDeterminismTests (config : TestConfig) : MetaM TestSuiteResult := do
+def runDeterminismTests (config : TestConfig) : Lean.Meta.MetaM TestSuiteResult := do
   if !config.enableDeterminismTests then
     return {
       suiteName := "Determinism Tests"
@@ -499,8 +501,8 @@ def runDeterminismTests (config : TestConfig) : MetaM TestSuiteResult := do
   let mut failedCount := 0
 
   -- Run DeterminismTests determinism tests
-  let (determinismResult, determinismTime) ← measureExecutionTime (CatNF.Tests.Determinism.runAllDeterminismTests)
-  let (_, determinismMemory) ← measureMemoryUsage (CatNF.Tests.Determinism.runAllDeterminismTests)
+  let (_, determinismTime) ← measureExecutionTime Unit CatNF.Tests.Determinism.runAllDeterminismTests
+  let (_, determinismMemory) ← measureMemoryUsage Unit CatNF.Tests.Determinism.runAllDeterminismTests
 
   results := results ++ [{
     testSuite := "Determinism Tests"
@@ -518,8 +520,8 @@ def runDeterminismTests (config : TestConfig) : MetaM TestSuiteResult := do
 
   -- Run NonDeterminismDetection determinism tests
   if config.enableNonDeterminismDetection then
-    let (nonDeterminismResult, nonDeterminismTime) ← measureExecutionTime (CatNF.Tests.Determinism.NonDeterminismDetection.runAllNonDeterminismDetectionTests)
-    let (_, nonDeterminismMemory) ← measureMemoryUsage (CatNF.Tests.Determinism.NonDeterminismDetection.runAllNonDeterminismDetectionTests)
+    let (_, nonDeterminismTime) ← measureExecutionTime Unit CatNF.Tests.Determinism.NonDeterminismDetection.runAllNonDeterminismDetectionTests
+    let (_, nonDeterminismMemory) ← measureMemoryUsage Unit CatNF.Tests.Determinism.NonDeterminismDetection.runAllNonDeterminismDetectionTests
 
     results := results ++ [{
       testSuite := "Determinism Tests"
@@ -548,7 +550,7 @@ def runDeterminismTests (config : TestConfig) : MetaM TestSuiteResult := do
   }
 
 -- Main test runner
-def runAllTests (config : TestConfig) : MetaM OverallTestResult := do
+def runAllTests (config : TestConfig) : Lean.Meta.MetaM OverallTestResult := do
   IO.println "Starting comprehensive test suite execution..."
   IO.println s!"Configuration: Unit={config.enableUnitTests}, Integration={config.enableIntegrationTests}, Performance={config.enablePerformanceTests}, Determinism={config.enableDeterminismTests}"
 
@@ -646,9 +648,9 @@ def runAllTests (config : TestConfig) : MetaM OverallTestResult := do
         logInfo s!"      Details: {result.details.get!}"
 
   if failedTests == 0 then
-    logInfo "🎉 ALL TESTS PASSED! The system is working correctly."
+    logInfo "ALL TESTS PASSED."
   else
-    logInfo s!"❌ {failedTests} TESTS FAILED! Please check the results above."
+    logInfo s!"{failedTests} test(s) FAILED; see results above."
 
   return {
     totalSuites := suiteResults.length
@@ -663,7 +665,7 @@ def runAllTests (config : TestConfig) : MetaM OverallTestResult := do
   }
 
 -- Quick test runner for development
-def runQuickTests : MetaM Unit := do
+def runQuickTests : Lean.Meta.MetaM Unit := do
   let config : TestConfig := {
     enableUnitTests := true
     enableIntegrationTests := true
@@ -684,27 +686,43 @@ def runQuickTests : MetaM Unit := do
   let result ← runAllTests config
   logInfo s!"Quick tests completed: {result.passedTests}/{result.totalTests} passed"
 
--- Full test runner for CI/CD
--- Legacy function for compatibility
-def runFullTests : MetaM Unit := do
-  let config : TestConfig := {
-    enableUnitTests := true
-    enableIntegrationTests := true
-    enablePerformanceTests := true
-    enableDeterminismTests := true
-    enableRegressionDetection := true
-    enableNonDeterminismDetection := true
-    timeoutMs := 300000
-    memoryLimitMB := 2000
-    enableDetailedLogging := true
-    enablePerformanceLogging := true
-    enableStatisticalAnalysis := true
-    maxConcurrentTests := 4
-    retryFailedTests := true
-    maxRetries := 3
-  }
+/-- Configuration used by `runFullTestsIO` / `runFullTests` (CI default). -/
+def ciTestConfig : TestConfig := {
+  enableUnitTests := true
+  enableIntegrationTests := true
+  enablePerformanceTests := true
+  enableDeterminismTests := true
+  enableRegressionDetection := true
+  enableNonDeterminismDetection := true
+  timeoutMs := 300000
+  memoryLimitMB := 2000
+  enableDetailedLogging := true
+  enablePerformanceLogging := true
+  enableStatisticalAnalysis := true
+  maxConcurrentTests := 4
+  retryFailedTests := true
+  maxRetries := 3
+}
 
-  let result ← runAllTests config
+/-- Run the full MetaM test harness from `IO` (initializes search path and environment). -/
+def runFullTestsIO : IO OverallTestResult := do
+  Lean.initSearchPath (← Lean.findSysroot)
+  let env ← Lean.importModules #[`CatNF.Tests.TestRunner] {} 0
+  let coreCtx : Core.Context := {
+    fileName := "<test>"
+    fileMap := default
+    options := {}
+  }
+  let coreS : Core.State := { env := env }
+  let m : CoreM OverallTestResult := do
+    let (result, _) ← MetaM.run (runAllTests ciTestConfig) {} {}
+    return result
+  let (result, _) ← CoreM.toIO m coreCtx coreS
+  return result
+
+-- Full test runner for CI/CD (MetaM; use `runFullTestsIO` from `IO`).
+def runFullTests : Lean.Meta.MetaM Unit := do
+  let result ← runAllTests ciTestConfig
   IO.println s!"Full tests completed: {result.passedTests}/{result.totalTests} passed"
 
 -- Main entry point
@@ -712,7 +730,6 @@ def main : IO Unit := do
   IO.println "CatNF Comprehensive Test Suite"
   IO.println "=============================="
 
-  -- Run full test suite in IO context
   try
     let result ← runFullTestsIO
     IO.println s!"All tests completed: {result.passedTests}/{result.totalTests} passed"
@@ -724,35 +741,5 @@ def main : IO Unit := do
   catch e =>
     IO.println s!"Test execution failed: {e}"
     IO.Process.exit 1
-
--- IO wrapper for running tests
-def runFullTestsIO : IO OverallTestResult := do
-  let config : TestConfig := {
-    enableUnitTests := true
-    enableIntegrationTests := true
-    enablePerformanceTests := true
-    enableDeterminismTests := true
-    enableRegressionDetection := true
-    enableNonDeterminismDetection := true
-    timeoutMs := 300000
-    memoryLimitMB := 2000
-    enableDetailedLogging := true
-    enablePerformanceLogging := true
-    enableStatisticalAnalysis := true
-    maxConcurrentTests := 4
-    retryFailedTests := true
-    maxRetries := 3
-  }
-
-  let coreCtx : Core.Context := {
-    fileName := "<test>"
-    fileMap := default
-    options := {}
-  }
-
-  let metaCtx : Meta.Context := {}
-
-  let (result, _) ← (runAllTests config).run metaCtx |>.run' {} |>.run coreCtx {}
-  return result
 
 end CatNF.Tests.TestRunner

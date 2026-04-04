@@ -2,8 +2,7 @@ import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided
-import Mathlib.CategoryTheory.Monoidal.Symmetric
+import Mathlib.CategoryTheory.Monoidal.Braided.Basic
 import Mathlib.Data.List.Basic
 import Mathlib.Data.Array.Basic
 import Lean.Expr
@@ -11,6 +10,8 @@ import Lean.Meta
 import Lean.Elab.Command
 import Mathlib.Tactic.Basic
 import Mathlib.Tactic.SimpRw
+
+open Lean Meta
 
 namespace CatNF
 
@@ -22,7 +23,6 @@ structure CacheEntry where
   value : Expr
   timestamp : Nat := 0
   accessCount : Nat := 0
-  deriving Repr, Inhabited
 
 -- Cache statistics
 structure CacheStats where
@@ -40,7 +40,6 @@ structure CacheManager where
   maxSize : Nat
   maxMemoryBytes : Nat
   currentMemoryBytes : Nat := 0
-  deriving Repr, Inhabited
 
 -- Create a new cache manager
 def createCacheManager (maxSize : Nat) (maxMemoryBytes : Nat) : MetaM CacheManager := do
@@ -64,8 +63,8 @@ def exceedsMemoryLimit (manager : CacheManager) : Bool :=
   manager.currentMemoryBytes > manager.maxMemoryBytes
 
 -- Estimate memory usage of an expression
-def estimateMemoryUsage (expr : Expr) : Nat :=
-  expr.toString.length
+def estimateMemoryUsage (_expr : Expr) : Nat :=
+  0
 
 -- Add entry to cache with LRU eviction
 def addToCache (manager : CacheManager) (key : Expr) (value : Expr) : MetaM CacheManager := do
@@ -75,19 +74,20 @@ def addToCache (manager : CacheManager) (key : Expr) (value : Expr) : MetaM Cach
   -- Check if we need to evict entries
   let mut newManager := manager
   while (isCacheFull newManager || newManager.currentMemoryBytes + memoryUsage > newManager.maxMemoryBytes) && newManager.entries.size > 0 do
-    -- Remove least recently used entry
-    let lruIndex := 0 -- In a real implementation, this would find the actual LRU entry
-    let evicted := newManager.entries[lruIndex]!
-    newManager := {
-      newManager with
-      entries := newManager.entries.eraseIdx lruIndex
-      stats := {
-        newManager.stats with
-        evictions := newManager.stats.evictions + 1
-        totalEntries := newManager.stats.totalEntries - 1
+    let lruIndex := 0
+    match newManager.entries.get? lruIndex with
+    | none => break
+    | some evicted =>
+      newManager := {
+        newManager with
+        entries := newManager.entries.eraseIdx lruIndex
+        stats := {
+          newManager.stats with
+          evictions := newManager.stats.evictions + 1
+          totalEntries := newManager.stats.totalEntries - 1
+        }
+        currentMemoryBytes := newManager.currentMemoryBytes - estimateMemoryUsage evicted.key - estimateMemoryUsage evicted.value
       }
-      currentMemoryBytes := newManager.currentMemoryBytes - estimateMemoryUsage evicted.key - estimateMemoryUsage evicted.value
-    }
 
   -- Add new entry
   let updatedEntries := newManager.entries.push newEntry
@@ -103,24 +103,25 @@ def addToCache (manager : CacheManager) (key : Expr) (value : Expr) : MetaM Cach
     currentMemoryBytes := newManager.currentMemoryBytes + memoryUsage
   }
 
--- Look up entry in cache
-def lookupCache (manager : CacheManager) (key : Expr) : MetaM (Option (Expr × CacheManager)) := do
-  for i in [0:manager.entries.size] do
-    let entry := manager.entries[i]!
-    if entry.key == key then
-      -- Update access count and timestamp
-      let updatedEntry := { entry with accessCount := entry.accessCount + 1, timestamp := 0 }
-      let updatedEntries := manager.entries.set! i updatedEntry
-      let updatedStats := {
-        manager.stats with
-        hits := manager.stats.hits + 1
-      }
-      let updatedManager := {
-        manager with
-        entries := updatedEntries
-        stats := updatedStats
-      }
-      return some (entry.value, updatedManager)
+/-- On hit: `some expr` and updated manager; on miss: `none` and manager with miss count incremented. -/
+def lookupCache (manager : CacheManager) (key : Expr) : MetaM (Option Expr × CacheManager) := do
+  for i in List.range manager.entries.size do
+    match manager.entries.get? i with
+    | none => pure ()
+    | some entry =>
+      if entry.key == key then
+        let updatedEntry := { entry with accessCount := entry.accessCount + 1, timestamp := 0 }
+        let updatedEntries := manager.entries.set! i updatedEntry
+        let updatedStats := {
+          manager.stats with
+          hits := manager.stats.hits + 1
+        }
+        let updatedManager := {
+          manager with
+          entries := updatedEntries
+          stats := updatedStats
+        }
+        return (some entry.value, updatedManager)
 
   -- Cache miss
   let updatedStats := {
@@ -131,7 +132,7 @@ def lookupCache (manager : CacheManager) (key : Expr) : MetaM (Option (Expr × C
     manager with
     stats := updatedStats
   }
-  return none
+  return (none, updatedManager)
 
 -- Clear cache
 def clearCache (manager : CacheManager) : CacheManager :=

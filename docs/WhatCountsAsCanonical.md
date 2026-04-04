@@ -1,6 +1,6 @@
-# What Counts as Canonical?
+# What counts as canonical?
 
-This document explains what expressions are considered "canonical" by the `cat_nf` normalizer and provides illustrative examples.
+This document describes **target** normal forms the CatNF pipeline aims toward. For how to run normalization in code, see [README.md](../README.md). The examples below are **illustrative** and may not match exact Mathlib pretty-printing.
 
 ## Categories
 
@@ -35,19 +35,17 @@ f ≫ 𝟙 Y
 
 ### Isomorphisms
 
-**Canonical**: No `hom ≫ inv` or `inv ≫ hom` pairs
+**Target**: Cancel adjacent `hom ≫ inv` and `inv ≫ hom` pairs down to identity when the iso laws apply.
+
 ```lean
--- Canonical: 𝟙 X
+-- Non-canonical (reducible): composed iso legs
 iso.hom ≫ iso.inv
 
--- Canonical: 𝟙 Y
-iso.inv ≫ iso.hom
-
--- Non-canonical: iso.hom ≫ iso.inv
-iso.hom ≫ iso.inv
+-- Target: identity on the domain (conceptually 𝟙 _)
+-- (Exact lemma names depend on Mathlib’s iso API)
 ```
 
-**Rule**: Isomorphism pairs are cancelled using `hom_inv_id` and `inv_hom_id`.
+**Rule**: Use isomorphism laws (`hom_inv_id`, `inv_hom_id`, etc.) so explicit `hom ≫ inv` / `inv ≫ hom` chains do not remain in the normalized morphism expression.
 
 ### Functor Maps
 
@@ -75,9 +73,11 @@ F ◁ (f ≫ g)
 
 **Rule**: Whiskering is standardized using `whiskerLeft_comp` and `whiskerRight_comp`.
 
-## Monoidal Categories
+## Monoidal categories
 
-### Tensor Products
+Monoidal, braided, and symmetric behavior depends on the concrete `MonoidalCategory` / `BraidedCategory` instance and on which rewrites are available. The following is the **intended** shape of normal forms, not a guarantee for every morphism type.
+
+### Tensor products
 
 **Canonical**: Right-associated tensors
 ```lean
