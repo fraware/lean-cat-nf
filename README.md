@@ -14,7 +14,7 @@ Normalize category-theoretic morphism expressions inside Lean’s metaprogrammin
 
 <br/>
 
-[Contributing](CONTRIBUTING.md) · [Canonical forms](docs/WhatCountsAsCanonical.md) · [Versions](docs/Compatibility.md) · [Issues](https://github.com/fraware/lean-cat-nf/issues)
+[Contributing](CONTRIBUTING.md) · [Documentation](docs/README.md) · [User guide](docs/UserGuide.md) · [Canonical forms](docs/WhatCountsAsCanonical.md) · [Versions](docs/Compatibility.md) · [Issues](https://github.com/fraware/lean-cat-nf/issues)
 
 </div>
 
@@ -120,7 +120,7 @@ def demoNormalize (e : Expr) : MetaM (Expr × List AppliedRewrite) := do
   normalizeGoalM e config
 ```
 
-Working examples live under `src/CatNF/Tests/`. For what “canonical” means in this project, see [What counts as canonical?](docs/WhatCountsAsCanonical.md).
+Working examples live under `src/CatNF/Tests/`. For what “canonical” means in this project, see [What counts as canonical?](docs/WhatCountsAsCanonical.md). For entry points, limits, and common errors, see the [user guide](docs/UserGuide.md).
 
 ### Configuration at a glance
 
@@ -268,4 +268,4 @@ Licensed under the [MIT License](LICENSE).
 
 Thanks to the Lean 4 team, the Mathlib community, and everyone who has improved this project.
 
-For questions, see [docs/](docs/) and the links under the title, or open an [issue](https://github.com/fraware/lean-cat-nf/issues). Repository discussions are available when enabled.
+For questions, see the [documentation index](docs/README.md) and the links under the title, or open an [issue](https://github.com/fraware/lean-cat-nf/issues). Repository discussions are available when enabled.
