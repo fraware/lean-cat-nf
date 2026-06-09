@@ -1,15 +1,4 @@
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
-import Mathlib.CategoryTheory.Iso
-import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided.Basic
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
-import Lean.Expr
 import Lean.Meta
-import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
 
 open Lean Meta
 
@@ -65,7 +54,7 @@ def processTasksInParallel (manager : ParallelManager) : MetaM ParallelManager :
   let mut failedTasks := 0
   let batchSize := min manager.config.maxWorkers manager.tasks.size
   for i in List.range batchSize do
-    match manager.tasks.get? i with
+    match manager.tasks[i]? with
     | none => pure ()
     | some task =>
       let processedTask ← processTask task

@@ -5,7 +5,7 @@ package «lean-cat-nf» where
   srcDir := "src"
 
 require mathlib from git
-  "https://github.com/leanprover-community/mathlib4.git" @ "v4.8.0"
+  "https://github.com/leanprover-community/mathlib4.git" @ "v4.31.0-rc1"
 
 @[default_target]
 lean_lib «CatNF» where
@@ -14,9 +14,10 @@ lean_lib «CatNF» where
     `CatNF.Cache,
     `CatNF.IndexedRules,
     `CatNF.ParallelProcessing,
-    `CatNF.AssocUnit,
-    `CatNF.FunctorWhisker,
-    `CatNF.IsoTransport,
+    `CatNF.Category.Basic,
+    `CatNF.Category.FunctorWhisker,
+    `CatNF.Category.IsoTransport,
+    `CatNF.Category.Pipeline,
     `CatNF.RewriteRules,
     `CatNF.Monoidal.Core,
     `CatNF.Monoidal.Coherence,
@@ -40,18 +41,24 @@ lean_lib CatNFTests where
     `CatNF.Tests.Determinism.NonDeterminismDetection,
     `CatNF.Tests.TestRunner]
 
+def consoleLinkArgs : Array String :=
+  if System.Platform.isWindows then #["-Wl,-subsystem,console"] else #[]
+
 lean_exe «bench» where
   root := `bench.Bench
   supportInterpreter := true
+  moreLinkArgs := consoleLinkArgs
 
-@[test_runner]
+@[test_driver]
 lean_exe «test-runner» where
   root := `CatNF.Tests.TestRunner
   supportInterpreter := true
+  moreLinkArgs := consoleLinkArgs
 
 lean_exe «test-runner-final» where
   root := `test_runner_final
   supportInterpreter := true
+  moreLinkArgs := consoleLinkArgs
 
 /-- Run `lake exe doc-gen4 -- CatNF` after adding a compatible `require «doc-gen4»` (see CONTRIBUTING.md). -/
 target «docs» : Unit := do

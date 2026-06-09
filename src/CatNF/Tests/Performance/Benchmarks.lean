@@ -1,12 +1,12 @@
 import Mathlib.CategoryTheory.Category.Basic
 import Lean.Expr
 import Lean.Meta
-import Mathlib.Tactic.Basic
 import CatNF.Core
 
 namespace CatNF.Tests.Performance
 
 open Lean Meta CatNF
+open CatNF.MorphismNames
 
 def benchConfig : Config := {
   maxSteps := 100
@@ -19,7 +19,7 @@ def benchConfig : Config := {
 def runPerformanceTests : MetaM Unit := do
   let f := mkConst (Name.mkSimple "f")
   let g := mkConst (Name.mkSimple "g")
-  let comp := mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) f g
+  let comp := mkCategoryComp f g
   let _ ← normalizeGoalM comp benchConfig
   return ()
 

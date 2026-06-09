@@ -4,8 +4,6 @@ import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
 import Mathlib.CategoryTheory.Monoidal.Braided.Basic
 import Mathlib.CategoryTheory.Whiskering
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
 import Mathlib.Data.Real.Basic
 import Lean.Expr
 import Lean.Meta
@@ -13,12 +11,10 @@ import Lean.Elab.Command
 import Lean.Environment
 import Lean.Util.Path
 import Lean.CoreM
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
 import CatNF.Core
-import CatNF.AssocUnit
-import CatNF.FunctorWhisker
-import CatNF.IsoTransport
+import CatNF.Category.Basic
+import CatNF.Category.FunctorWhisker
+import CatNF.Category.IsoTransport
 import CatNF.Monoidal.Core
 import CatNF.Monoidal.Coherence
 import CatNF.RewriteRules
@@ -725,8 +721,7 @@ def runFullTests : Lean.Meta.MetaM Unit := do
   let result ← runAllTests ciTestConfig
   IO.println s!"Full tests completed: {result.passedTests}/{result.totalTests} passed"
 
--- Main entry point
-def main : IO Unit := do
+def runMain : IO Unit := do
   IO.println "CatNF Comprehensive Test Suite"
   IO.println "=============================="
 
@@ -743,3 +738,7 @@ def main : IO Unit := do
     IO.Process.exit 1
 
 end CatNF.Tests.TestRunner
+
+/-- Module-root entry point for `lake exe test-runner` (console subsystem on Windows). -/
+def main : IO Unit :=
+  CatNF.Tests.TestRunner.runMain

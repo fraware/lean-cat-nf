@@ -1,15 +1,4 @@
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
-import Mathlib.CategoryTheory.Iso
-import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided.Basic
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
-import Lean.Expr
 import Lean.Meta
-import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
 
 open Lean Meta
 
@@ -75,12 +64,12 @@ def addToCache (manager : CacheManager) (key : Expr) (value : Expr) : MetaM Cach
   let mut newManager := manager
   while (isCacheFull newManager || newManager.currentMemoryBytes + memoryUsage > newManager.maxMemoryBytes) && newManager.entries.size > 0 do
     let lruIndex := 0
-    match newManager.entries.get? lruIndex with
+    match newManager.entries[lruIndex]? with
     | none => break
     | some evicted =>
       newManager := {
         newManager with
-        entries := newManager.entries.eraseIdx lruIndex
+        entries := newManager.entries.eraseIdx! lruIndex
         stats := {
           newManager.stats with
           evictions := newManager.stats.evictions + 1
@@ -106,7 +95,7 @@ def addToCache (manager : CacheManager) (key : Expr) (value : Expr) : MetaM Cach
 /-- On hit: `some expr` and updated manager; on miss: `none` and manager with miss count incremented. -/
 def lookupCache (manager : CacheManager) (key : Expr) : MetaM (Option Expr × CacheManager) := do
   for i in List.range manager.entries.size do
-    match manager.entries.get? i with
+    match manager.entries[i]? with
     | none => pure ()
     | some entry =>
       if entry.key == key then

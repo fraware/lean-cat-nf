@@ -8,10 +8,10 @@ This document records the first modernization and extraction plan for `lean-cat-
 
 The repository is valuable for the contribution program primarily as an internal proof-friction detector. It can reveal repeated categorical rewrite patterns that should become Mathlib simp lemmas, reassociation lemmas, extensionality lemmas, or documentation examples.
 
-Current constraints:
+Current constraints (post-sprint):
 
-- Current toolchain in `lean-toolchain`: `leanprover/lean4:v4.8.0`.
-- `Lakefile.lean` pins Mathlib at `v4.8.0`.
+- Toolchain in `lean-toolchain`: `leanprover/lean4:v4.31.0-rc1`.
+- `Lakefile.lean` pins Mathlib at `v4.31.0-rc1`.
 - The README states that no `cat_nf` tactic syntax is shipped yet and that users should call metaprogramming entrypoints such as `normalizeGoalM` or `catNFImpl`.
 - The core file imports Mathlib category theory, monoidal category infrastructure, whiskering, Lean metaprogramming modules, and tactic modules.
 - The current `Config` type includes resource, parallelism, caching, tracing, and memory-budget fields, which are useful for a standalone tool but too broad for a first Mathlib contribution.
@@ -136,4 +136,17 @@ The following should remain repository-local during this sprint:
 
 ## Build certification status
 
-This document is a planning and extraction artifact. It does not certify that the repository has been built on Lean 4.31 yet. Certification requires a successful local or CI run of the commands in Gate 1.
+Gate 1 certified on **2026-06-09** (Windows local + updated `.github/workflows/ci.yml` for `v4.31.0-rc1`):
+
+| Command | Status |
+|---------|--------|
+| `lake update` | Pass |
+| `lake build` | Pass |
+| `lake build CatNFTests` | Pass |
+| `lake exe test-runner` | Pass (11/11) |
+| `lake exe test-runner-final` | Pass |
+| `lake exe bench` | Pass |
+
+Gate 2 complete: kernel under `src/CatNF/Core/` (Mathlib-free), category frontends under `src/CatNF/Category/`, pipeline in `CatNF.Category.Pipeline`.
+
+Gate 3 complete: [`EXTRACTION_LEDGER.md`](EXTRACTION_LEDGER.md) with 12+ concrete lemma cases.

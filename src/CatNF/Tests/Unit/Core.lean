@@ -3,17 +3,13 @@ import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
 import Mathlib.CategoryTheory.Whiskering
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
 import Lean.Expr
 import Lean.Meta
 import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
 import CatNF.Core
-import CatNF.AssocUnit
-import CatNF.FunctorWhisker
-import CatNF.IsoTransport
+import CatNF.Category.Basic
+import CatNF.Category.FunctorWhisker
+import CatNF.Category.IsoTransport
 import CatNF.Monoidal.Core
 import CatNF.Monoidal.Coherence
 import CatNF.RewriteRules
@@ -24,6 +20,7 @@ namespace CatNF.Tests.Unit
 open Lean Meta
 open CatNF hiding normalizeMonoidal
 open CatNF.Monoidal
+open CatNF.MorphismNames
 
 -- Test configuration for deterministic testing
 def testConfig : Config := {
@@ -40,28 +37,28 @@ def mkTestExpr (name : String) : MetaM Expr := do
   return mkConst constName
 
 def mkTestComposition (f g : Expr) : Expr :=
-  mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) f g
+  mkCategoryComp f g
 
 def mkTestIdentity (C : Expr) : Expr :=
-  mkApp (mkConst `CategoryTheory.CategoryStruct.id) C
+  mkCategoryId C
 
 def mkTestIsoHom (iso : Expr) : Expr :=
-  mkApp (mkConst `CategoryTheory.Iso.hom) iso
+  mkIsoHom iso
 
 def mkTestIsoInv (iso : Expr) : Expr :=
-  mkApp (mkConst `CategoryTheory.Iso.inv) iso
+  mkIsoInv iso
 
 def mkTestFunctorMap (F f : Expr) : Expr :=
-  mkApp2 (mkConst `CategoryTheory.Functor.map) F f
+  mkFunctorMap F f
 
 def mkTestWhiskerLeft (F f : Expr) : Expr :=
-  mkApp2 (mkConst `CategoryTheory.WhiskeringLeft.whiskerLeft) F f
+  mkWhiskerLeft F f
 
 def mkTestWhiskerRight (f G : Expr) : Expr :=
-  mkApp2 (mkConst `CategoryTheory.WhiskeringRight.whiskerRight) f G
+  mkWhiskerRight f G
 
 def mkTestTensor (f g : Expr) : Expr :=
-  mkApp2 (mkConst `CategoryTheory.MonoidalCategory.tensorObj) f g
+  mkTensorObj f g
 
 -- Test cases for Core module
 def testIsComposition : MetaM Unit := do
@@ -634,6 +631,7 @@ def testApplyFinalSimp : MetaM Unit := do
 
 -- Main test runner
 def runAllTests : MetaM Unit := do
+  runCatNFM! resetBuiltinRules
   testIsComposition
   testIsIdentity
   testIsIsoHom

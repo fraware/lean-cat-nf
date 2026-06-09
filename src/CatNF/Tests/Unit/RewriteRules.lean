@@ -3,13 +3,9 @@ import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
 import Mathlib.CategoryTheory.Whiskering
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
 import Lean.Expr
 import Lean.Meta
 import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
 import CatNF.Core
 import CatNF.RewriteRules
 
@@ -74,6 +70,7 @@ def testValidateRuleConsistency : MetaM Unit := do
   assert! ok
 
 def runAllTests : MetaM Unit := do
+  runCatNFM! resetBuiltinRules
   testDefaultRules
   testRegisterAndFind
   testApplyRewriteRuleStub

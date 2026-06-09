@@ -2,7 +2,6 @@ import Mathlib.CategoryTheory.Category.Basic
 import Lean.Expr
 import Lean.Meta
 import Lean.Elab.Command
-import Mathlib.Tactic.Basic
 import CatNF.Core
 import CatNF.Attr
 import CatNF.RewriteRules

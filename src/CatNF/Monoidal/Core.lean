@@ -1,16 +1,8 @@
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
-import Mathlib.CategoryTheory.Iso
 import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided.Basic
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
-import Lean.Expr
 import Lean.Meta
-import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
-import CatNF.Core
+import CatNF.Core.Segments
+import CatNF.Core.Config
+import CatNF.Core.Normalize
 
 open Lean Meta
 
@@ -23,7 +15,7 @@ def applyAssociators (segments : List ExprSegment) : MetaM (List ExprSegment) :=
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
@@ -47,7 +39,7 @@ def applyUnitors (segments : List ExprSegment) : MetaM (List ExprSegment) := do
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
@@ -77,7 +69,7 @@ def applyBraiding (segments : List ExprSegment) : MetaM (List ExprSegment) := do
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
@@ -97,7 +89,7 @@ def applySymmetry (segments : List ExprSegment) : MetaM (List ExprSegment) := do
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
