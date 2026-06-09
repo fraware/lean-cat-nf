@@ -6,8 +6,8 @@ This document describes how **lean-cat-nf** tracks **Lean 4** and **Mathlib4**, 
 
 | Component | Source | Current pin |
 |-----------|--------|-------------|
-| Lean 4 | [`lean-toolchain`](../lean-toolchain) | `leanprover/lean4:v4.8.0` |
-| Mathlib4 (requested revision) | [`Lakefile.lean`](../Lakefile.lean) `require mathlib` | `v4.8.0` |
+| Lean 4 | [`lean-toolchain`](../lean-toolchain) | `leanprover/lean4:v4.31.0-rc1` |
+| Mathlib4 (requested revision) | [`Lakefile.lean`](../Lakefile.lean) `require mathlib` | `v4.31.0-rc1` |
 | Mathlib4 (exact Git revision) | [`lake-manifest.json`](../lake-manifest.json) | The `rev` field on the `mathlib` package entry (locked when you last ran `lake update`) |
 
 After a bump, **both** `Lakefile.lean` and `lake-manifest.json` should be consistent: the manifest records the concrete commit Lake resolved for the tag or branch you requested.
@@ -38,7 +38,8 @@ require «lean-cat-nf» from git
 
 Typical modules (see [README.md](../README.md) for API details):
 
-- `CatNF.Core` — `normalizeGoal`, `normalizeGoalM`, `Config`, `flattenComposition`
+- `CatNF.Core` — `normalizeGoalM`, `normalizeSegmentsM`, `Config`, `flattenComposition`, `CatNF.MorphismNames`
+- `CatNF.Category.Pipeline` — category + optional monoidal orchestration (re-exported from `CatNF.Core`)
 - `CatNF.Tactic` — `catNFImpl`, helpers such as `normalizeWithProgress`
 - `CatNF.RewriteRules`, `CatNF.Attr` — rule registration and validation
 

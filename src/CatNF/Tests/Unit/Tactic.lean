@@ -1,12 +1,12 @@
 import Mathlib.CategoryTheory.Category.Basic
 import Lean.Expr
 import Lean.Meta
-import Mathlib.Tactic.Basic
 import CatNF.Core
 
 namespace CatNF.Tests.Unit.Tactic
 
 open Lean Meta CatNF
+open CatNF.MorphismNames
 
 def testConfig : Config := {
   maxSteps := 100
@@ -19,10 +19,10 @@ def testConfig : Config := {
 def runAllTests : MetaM Unit := do
   let f := mkConst (Name.mkSimple "f")
   let g := mkConst (Name.mkSimple "g")
-  let comp := mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) f g
+  let comp := mkCategoryComp f g
   let b ← runCatNFM! (isComposition comp)
   assert! b
-  let b2 ← runCatNFM! (isIdentity (mkApp (mkConst `CategoryTheory.CategoryStruct.id) f))
+  let b2 ← runCatNFM! (isIdentity (mkCategoryId f))
   assert! b2
   logInfo "Tactic unit smoke test passed."
 

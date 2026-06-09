@@ -1,19 +1,6 @@
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
-import Mathlib.CategoryTheory.Iso
-import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided.Basic
-import Mathlib.CategoryTheory.Whiskering
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
-import Lean.Expr
 import Lean.Meta
-import Lean.Elab.Tactic
-import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
 import CatNF.Core
-import CatNF.AssocUnit
+import CatNF.Category.Basic
 
 open Lean Meta
 

@@ -18,7 +18,7 @@ Normalize category-theoretic morphism expressions inside Lean’s metaprogrammin
 
 <br/>
 
-[![Lean 4.8](https://img.shields.io/badge/Lean-4.8.0-5c6bc0?style=flat-square)](https://leanprover.github.io/lean4/)
+[![Lean 4.31](https://img.shields.io/badge/Lean-4.31.0--rc1-5c6bc0?style=flat-square)](https://leanprover.github.io/lean4/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-546e7a?style=flat-square)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-78909c?style=flat-square)](.github/workflows/ci.yml)
 

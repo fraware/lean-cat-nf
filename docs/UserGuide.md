@@ -55,7 +55,9 @@ Other `Config` fields (`monoidal`, `trace`, caching, parallelism, etc.) are vali
 
 ## `raw` segments
 
-If `flattenComposition` does not match a known Mathlib head symbol (`CategoryStruct.comp`, `Functor.map`, `MonoidalCategory.tensorObj`, etc.), the subtree becomes a single **`ExprSegment.raw`** node. The normalizer then mostly **preserves** that subtree as an opaque chunk inside the rebuilt composition.
+If `flattenComposition` does not match a known Mathlib head symbol, the subtree becomes a single **`ExprSegment.raw`** node. The normalizer then mostly **preserves** that subtree as an opaque chunk inside the rebuilt composition.
+
+Canonical head symbols live in `CatNF.MorphismNames` (Mathlib 4.31), including `CategoryTheory.CategoryStruct.comp`, `CategoryTheory.Functor.map`, `CategoryTheory.Functor.whiskerLeft` / `whiskerRight`, and `CategoryTheory.MonoidalCategory.tensorObj`. Use `mkCategoryComp`, `mkWhiskerLeft`, and related helpers when building test expressions.
 
 To get structured segments, the morphism expression should use the **same constants** CatNF pattern-matches on (as in Mathlib’s category-theory library). Custom notation that elaborates to different `Expr` shapes may end up entirely or partly `raw`.
 

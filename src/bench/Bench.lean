@@ -1,16 +1,15 @@
 import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.Data.Array.Basic
 import Mathlib.Data.Real.Basic
 import Lean.Expr
 import Lean.Meta
 import Lean.Environment
 import Lean.CoreM
-import Mathlib.Tactic.Basic
 import CatNF.Core
 
 namespace CatNF.Bench
 
 open Lean Meta CatNF
+open CatNF.MorphismNames
 
 -- Benchmark configuration
 structure BenchConfig where
@@ -111,17 +110,15 @@ def benchmarkTest (name : String) (test : MetaM Unit) (config : BenchConfig) : M
 def testSyntheticComp : MetaM Unit := do
   let f := mkConst (Name.mkSimple "f")
   let g := mkConst (Name.mkSimple "g")
-  let comp := mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) f g
+  let comp := mkCategoryComp f g
   let _ ← normalizeGoalM comp benchNormConfig
 
 def testSyntheticEqComp : MetaM Unit := do
   let f := mkConst (Name.mkSimple "f")
   let g := mkConst (Name.mkSimple "g")
   let h := mkConst (Name.mkSimple "h")
-  let left := mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp)
-    (mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) f g) h
-  let right := mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) f
-    (mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) g h)
+  let left := mkCategoryComp (mkCategoryComp f g) h
+  let right := mkCategoryComp f (mkCategoryComp g h)
   let goal := mkApp2 (mkConst `Eq) left right
   let _ ← normalizeGoalM goal benchNormConfig
 
@@ -130,7 +127,7 @@ def testLongChainSynthetic (n : Nat) : MetaM Unit := do
   let g := mkConst (Name.mkSimple "g")
   let mut e := f
   for _ in [0:n] do
-    e := mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) e g
+    e := mkCategoryComp e g
   let _ ← normalizeGoalM e benchNormConfig
 
 def runBenchmarks (config : BenchConfig) : MetaM (Array BenchResult) := do
@@ -191,11 +188,11 @@ open Lean Core Meta
 /-- Lake executable root: run benchmarks in a fresh environment (same pattern as Mathlib helpers). -/
 unsafe def main : IO UInt32 := do
   Lean.initSearchPath (← Lean.findSysroot)
-  withImportModules #[{ module := `bench.Bench }] {} 0 fun env => do
+  withImportModules #[{ module := `bench.Bench }] {} (fun env => do
     let coreCtx : Core.Context := { fileName := "<bench>", fileMap := default }
     let coreS : Core.State := { env }
     let m : CoreM UInt32 := do
       let (passed, _) ← MetaM.run CatNF.Bench.runBenchMain {} {}
       return if passed then 0 else 1
     let (code, _) ← CoreM.toIO m coreCtx coreS
-    return code
+    return code)

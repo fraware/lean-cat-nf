@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  LEAN_VERSION: v4.31.0-rc1
+
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
@@ -17,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        lean-version: [v4.8.0]
+        lean-version: [v4.31.0-rc1]
 
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
@@ -43,8 +46,14 @@ jobs:
       - name: Build
         run: lake build
 
+      - name: Build test modules
+        run: lake build CatNFTests
+
       - name: Run tests
         run: lake exe test-runner
+
+      - name: Run smoke tests
+        run: lake exe test-runner-final
 
       - name: Run benchmarks
         run: lake exe bench
@@ -54,7 +63,7 @@ jobs:
           set -euo pipefail
           for i in 1 2 3; do
             echo "determinism run $i"
-            lake exe test-runner
+            lake exe test-runner-final
           done
 
       - name: License scan (FOSSA)
@@ -63,17 +72,15 @@ jobs:
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
 
-  # Native linking of Mathlib-heavy exes can fail on Windows (long `leanc` command line).
-  # This job still validates that the library and test modules compile.
-  windows-compile:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
-      - name: Set up Lean v4.8.0
+      - name: Set up Lean ${{ env.LEAN_VERSION }}
         uses: leanprover/lean4-action@v2
         with:
-          lean-version: v4.8.0
+          lean-version: ${{ env.LEAN_VERSION }}
 
       - name: Cache Lake + Mathlib
         uses: actions/cache@6849a6489940f259c42e59d2b1a277dd1faff8a4
@@ -81,17 +88,23 @@ jobs:
           path: |
             .lake
             ~/.elan
-          key: lake-win-v4.8.0-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
+          key: lake-win-${{ env.LEAN_VERSION }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
           restore-keys: |
-            lake-win-v4.8.0-
+            lake-win-${{ env.LEAN_VERSION }}-
 
       - name: Fetch Mathlib cache
         run: lake exe cache get
 
-      - name: Build library and test modules (no native exe link)
+      - name: Build library and tests
         run: |
           lake build CatNF
-          lake build +CatNF.Tests.TestRunner
+          lake build CatNFTests
+
+      - name: Run tests
+        run: lake exe test-runner
+
+      - name: Run smoke tests
+        run: lake exe test-runner-final
 
   benchmark-compare:
     runs-on: ubuntu-latest
@@ -105,7 +118,7 @@ jobs:
       - name: Set up Lean
         uses: leanprover/lean4-action@v2
         with:
-          lean-version: v4.8.0
+          lean-version: ${{ env.LEAN_VERSION }}
 
       - name: Set up Python
         uses: actions/setup-python@82c7e631bb3cdc922fede895a1ef70edf546a7fa
@@ -151,7 +164,7 @@ jobs:
       - name: Set up Lean
         uses: leanprover/lean4-action@v2
         with:
-          lean-version: v4.8.0
+          lean-version: ${{ env.LEAN_VERSION }}
 
       - name: Build
         run: |

@@ -1,19 +1,12 @@
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
-import Mathlib.CategoryTheory.Iso
-import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided.Basic
 import Mathlib.CategoryTheory.Whiskering
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
-import Lean.Expr
 import Lean.Meta
-import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
-import CatNF.Core
+import CatNF.Core.Segments
+import CatNF.Core.Config
+import CatNF.Core.Normalize
+import CatNF.Core.MorphismNames
 
 open Lean Meta
+open CatNF.MorphismNames
 
 namespace CatNF
 
@@ -24,15 +17,14 @@ def flattenMapComp (segments : List ExprSegment) : MetaM (List ExprSegment) := d
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
         | .functor_map F (.comp f g) =>
           let fMap := ExprSegment.functor_map F f
           let gMap := ExprSegment.functor_map F g
-          let newComp := ExprSegment.comp fMap gMap
-          newResult := newResult ++ [newComp]
+          newResult := newResult ++ [fMap, gMap]
           changed := true
         | .functor_map _ .id =>
           newResult := newResult ++ [.id]
@@ -49,21 +41,19 @@ def standardizeWhiskering (segments : List ExprSegment) : MetaM (List ExprSegmen
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
         | .whisker_left F (.comp f g) =>
           let fWhisker := ExprSegment.whisker_left F f
           let gWhisker := ExprSegment.whisker_left F g
-          let newComp := ExprSegment.comp fWhisker gWhisker
-          newResult := newResult ++ [newComp]
+          newResult := newResult ++ [fWhisker, gWhisker]
           changed := true
         | .whisker_right (.comp f g) G =>
           let fWhisker := ExprSegment.whisker_right f G
           let gWhisker := ExprSegment.whisker_right g G
-          let newComp := ExprSegment.comp fWhisker gWhisker
-          newResult := newResult ++ [newComp]
+          newResult := newResult ++ [fWhisker, gWhisker]
           changed := true
         | .whisker_left _ .id =>
           newResult := newResult ++ [.id]
@@ -83,7 +73,7 @@ def applyFunctoriality (segments : List ExprSegment) : MetaM (List ExprSegment) 
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
@@ -124,7 +114,7 @@ def applyWhiskeringCommutation (segments : List ExprSegment) : MetaM (List ExprS
     changed := false
     let mut newResult : List ExprSegment := []
     for i in List.range result.length do
-      match result.get? i with
+      match result[i]? with
       | none => pure ()
       | some seg =>
         match seg with
@@ -167,11 +157,13 @@ def areFunctoriallyEquivalent (e1 e2 : Expr) : MetaM Bool := do
   return norm1 == norm2
 
 def extractFunctor (expr : Expr) : MetaM (Option Expr) := do
-  match expr with
-  | .app (.app (.const `CategoryTheory.Functor.map _) F) _ => return some F
-  | .app (.app (.const `CategoryTheory.WhiskeringLeft.whiskerLeft _) F) _ => return some F
-  | .app (.app (.const `CategoryTheory.WhiskeringRight.whiskerRight _) _) G => return some G
-  | _ => return none
+  if let some (F, _) := asFunctorMap? expr then
+    return some F
+  if let some (F, _) := asWhiskerLeft? expr then
+    return some F
+  if let some (_, G) := asWhiskerRight? expr then
+    return some G
+  return none
 
 def involvesFunctors (expr : Expr) : MetaM Bool := do
   match ← extractFunctor expr with

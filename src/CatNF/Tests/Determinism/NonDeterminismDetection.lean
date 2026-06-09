@@ -1,12 +1,12 @@
 import Mathlib.CategoryTheory.Category.Basic
 import Lean.Expr
 import Lean.Meta
-import Mathlib.Tactic.Basic
 import CatNF.Core
 
 namespace CatNF.Tests.Determinism.NonDeterminismDetection
 
 open Lean Meta CatNF
+open CatNF.MorphismNames
 
 def smokeConfig : Config := {
   maxSteps := 50
@@ -20,7 +20,7 @@ def smokeConfig : Config := {
 def runAllNonDeterminismDetectionTests : MetaM Unit := do
   let f := mkConst (Name.mkSimple "f")
   let g := mkConst (Name.mkSimple "g")
-  let comp := mkApp2 (mkConst `CategoryTheory.CategoryStruct.comp) f g
+  let comp := mkCategoryComp f g
   let _ ← normalizeGoalM comp smokeConfig
   return ()
 

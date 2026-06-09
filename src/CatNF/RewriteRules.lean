@@ -1,15 +1,4 @@
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
-import Mathlib.CategoryTheory.Iso
-import Mathlib.CategoryTheory.Monoidal.Category
-import Mathlib.CategoryTheory.Monoidal.Braided.Basic
-import Mathlib.Data.List.Basic
-import Mathlib.Data.Array.Basic
-import Lean.Expr
 import Lean.Meta
-import Lean.Elab.Command
-import Mathlib.Tactic.Basic
-import Mathlib.Tactic.SimpRw
 import CatNF.Core
 
 open Lean Meta
@@ -43,7 +32,7 @@ private def mkNamedSchema (n : Name) : RewriteSchema := {
 }
 
 /-- Built-in iso rules expected by the test suite (placeholders until a fuller registry exists). -/
-private def builtinIsoRuleEntries : Array RuleEntry :=
+def builtinIsoRuleEntries : Array RuleEntry :=
   #[
     { name := `CategoryTheory.Iso.refl, schema := mkNamedSchema `CategoryTheory.Iso.refl },
     { name := `CategoryTheory.Iso.trans, schema := mkNamedSchema `CategoryTheory.Iso.trans },
@@ -171,6 +160,10 @@ def exportRules : CatNFM (Array RuleEntry) := do
 -- Import rules from a saved format
 def importRules (rules : Array RuleEntry) : CatNFM Unit :=
   ExceptT.lift do liftM (m := IO) (ruleRegistry.set rules)
+
+/-- Reset the rule registry to built-in iso rules (deterministic test baseline). -/
+def resetBuiltinRules : CatNFM Unit :=
+  importRules builtinIsoRuleEntries
 
 -- Apply rules with timeout
 def applyRulesWithTimeout (expr : Expr) (_timeoutMs : Nat) : CatNFM (Option Expr) := do
