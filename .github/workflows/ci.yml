@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, "audit/**"]
   pull_request:
     branches: [main, develop]
 
@@ -25,10 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
-      - name: Set up Lean ${{ matrix.lean-version }}
-        uses: leanprover/lean4-action@v2
-        with:
-          lean-version: ${{ matrix.lean-version }}
+      - name: Install Lean toolchain
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" install "$(cat lean-toolchain)"
+          "$HOME/.elan/bin/elan" default "$(cat lean-toolchain)"
 
       - name: Cache Lake + Mathlib
         uses: actions/cache@6849a6489940f259c42e59d2b1a277dd1faff8a4
@@ -80,10 +82,13 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
-      - name: Set up Lean ${{ env.LEAN_VERSION }}
-        uses: leanprover/lean4-action@v2
-        with:
-          lean-version: ${{ env.LEAN_VERSION }}
+      - name: Install Lean toolchain
+        shell: bash
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" install "$(cat lean-toolchain)"
+          "$HOME/.elan/bin/elan" default "$(cat lean-toolchain)"
 
       - name: Cache Lake + Mathlib
         uses: actions/cache@6849a6489940f259c42e59d2b1a277dd1faff8a4
@@ -96,20 +101,25 @@ jobs:
             lake-win-${{ env.LEAN_VERSION }}-
 
       - name: Update dependencies
+        shell: bash
         run: lake update
 
       - name: Fetch Mathlib cache
+        shell: bash
         run: lake exe cache get
 
       - name: Build library and tests
+        shell: bash
         run: |
           lake build CatNF
           lake build CatNFTests
 
       - name: Run tests
+        shell: bash
         run: lake exe test-runner
 
       - name: Run smoke tests
+        shell: bash
         run: lake exe test-runner-final
 
   benchmark-compare:
