@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  LEAN_VERSION: v4.31.0-rc1
+  LEAN_VERSION: v4.34.0-rc2
 
 jobs:
   build-and-test:
@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        lean-version: [v4.31.0-rc1]
+        lean-version: [v4.34.0-rc2]
 
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
@@ -39,6 +39,9 @@ jobs:
           key: lake-${{ runner.os }}-${{ matrix.lean-version }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
           restore-keys: |
             lake-${{ runner.os }}-${{ matrix.lean-version }}-
+
+      - name: Update dependencies
+        run: lake update
 
       - name: Fetch Mathlib cache
         run: lake exe cache get
@@ -92,6 +95,9 @@ jobs:
           restore-keys: |
             lake-win-${{ env.LEAN_VERSION }}-
 
+      - name: Update dependencies
+        run: lake update
+
       - name: Fetch Mathlib cache
         run: lake exe cache get
 
@@ -127,6 +133,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          lake update
           lake exe cache get
           lake build
 
@@ -168,6 +175,7 @@ jobs:
 
       - name: Build
         run: |
+          lake update
           lake exe cache get
           lake build
 
