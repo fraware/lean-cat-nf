@@ -23,7 +23,7 @@ jobs:
         lean-version: [v4.34.0-rc2]
 
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: actions/checkout@v4
 
       - name: Install Lean toolchain
         run: |
@@ -33,14 +33,12 @@ jobs:
           "$HOME/.elan/bin/elan" default "$(cat lean-toolchain)"
 
       - name: Cache Lake + Mathlib
-        uses: actions/cache@6849a6489940f259c42e59d2b1a277dd1faff8a4
+        uses: actions/cache@v4
         with:
           path: |
             .lake
             ~/.elan
           key: lake-${{ runner.os }}-${{ matrix.lean-version }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
-          restore-keys: |
-            lake-${{ runner.os }}-${{ matrix.lean-version }}-
 
       - name: Update dependencies
         run: lake update
@@ -80,7 +78,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: actions/checkout@v4
 
       - name: Install Lean toolchain
         shell: bash
@@ -91,14 +89,12 @@ jobs:
           "$HOME/.elan/bin/elan" default "$(cat lean-toolchain)"
 
       - name: Cache Lake + Mathlib
-        uses: actions/cache@6849a6489940f259c42e59d2b1a277dd1faff8a4
+        uses: actions/cache@v4
         with:
           path: |
             .lake
             ~/.elan
           key: lake-win-${{ env.LEAN_VERSION }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
-          restore-keys: |
-            lake-win-${{ env.LEAN_VERSION }}-
 
       - name: Update dependencies
         shell: bash
@@ -127,7 +123,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -137,7 +133,7 @@ jobs:
           lean-version: ${{ env.LEAN_VERSION }}
 
       - name: Set up Python
-        uses: actions/setup-python@82c7e631bb3cdc922fede895a1ef70edf546a7fa
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -166,7 +162,7 @@ jobs:
           fi
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92d488738381e064f
+        uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: benchmark-results.txt
@@ -176,7 +172,7 @@ jobs:
     if: false
 
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: actions/checkout@v4
 
       - name: Set up Lean
         uses: leanprover/lean4-action@v2
@@ -193,7 +189,7 @@ jobs:
         run: lake exe doc-gen4 -- CatNF
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./build/doc
