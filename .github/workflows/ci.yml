@@ -38,7 +38,7 @@ jobs:
           path: |
             .lake
             ~/.elan
-          key: lake-${{ runner.os }}-${{ matrix.lean-version }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
+          key: lake-${{ runner.os }}-${{ matrix.lean-version }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'lakefile.lean') }}
 
       - name: Update dependencies
         run: lake update
@@ -94,7 +94,7 @@ jobs:
           path: |
             .lake
             ~/.elan
-          key: lake-win-${{ env.LEAN_VERSION }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'Lakefile.lean') }}
+          key: lake-win-${{ env.LEAN_VERSION }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'lakefile.lean') }}
 
       - name: Update dependencies
         shell: bash
