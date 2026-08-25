@@ -20,7 +20,7 @@ RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init
 
 WORKDIR /app
 
-COPY lean-toolchain Lakefile.lean lake-manifest.json ./
+COPY lean-toolchain lakefile.lean lake-manifest.json ./
 COPY src/ ./src/
 COPY scripts/docker-entrypoint.sh /usr/local/bin/lean-cat-nf
 
